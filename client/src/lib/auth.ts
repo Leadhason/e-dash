@@ -38,7 +38,7 @@ export const setAuthToken = (token: string) => localStorage.setItem("auth_token"
 export const isAuthenticated = () => !!getAuthToken();
 
 // Add auth token to API requests
-export const getAuthHeaders = () => {
+export const getAuthHeaders = (): Record<string, string> => {
   const token = getAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };

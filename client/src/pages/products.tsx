@@ -12,14 +12,14 @@ import { useState } from "react";
 
 export default function Products() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ["/api/products", { search: searchQuery, category: categoryFilter }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (searchQuery) params.append("search", searchQuery);
-      if (categoryFilter) params.append("category", categoryFilter);
+      if (categoryFilter && categoryFilter !== "all") params.append("category", categoryFilter);
       
       const response = await fetch(`/api/products?${params.toString()}`, {
         headers: getAuthHeaders(),
@@ -85,7 +85,7 @@ export default function Products() {
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Categories</SelectItem>
+                <SelectItem value="all">All Categories</SelectItem>
                 <SelectItem value="power_tools">Power Tools</SelectItem>
                 <SelectItem value="hand_tools">Hand Tools</SelectItem>
                 <SelectItem value="safety_equipment">Safety Equipment</SelectItem>

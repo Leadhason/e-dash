@@ -12,12 +12,16 @@ import { useState } from "react";
 
 export default function Customers() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   const { data: customers, isLoading } = useQuery<Customer[]>({
     queryKey: ["/api/customers", { search: searchQuery, type: typeFilter }],
     queryFn: async () => {
-      const response = await fetch("/api/customers", {
+      const params = new URLSearchParams();
+      if (searchQuery) params.append("search", searchQuery);
+      if (typeFilter && typeFilter !== "all") params.append("type", typeFilter);
+      
+      const response = await fetch(`/api/customers?${params.toString()}`, {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Failed to fetch customers");
@@ -114,7 +118,7 @@ export default function Customers() {
                 <SelectValue placeholder="All Customer Types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Customer Types</SelectItem>
+                <SelectItem value="all">All Customer Types</SelectItem>
                 <SelectItem value="individual">Individual</SelectItem>
                 <SelectItem value="professional_contractor">Professional Contractor</SelectItem>
                 <SelectItem value="industrial_account">Industrial Account</SelectItem>

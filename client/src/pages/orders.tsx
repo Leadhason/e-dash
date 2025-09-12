@@ -10,13 +10,13 @@ import { OrderWithCustomer } from "@/types";
 import { useState } from "react";
 
 export default function Orders() {
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const { data: orders, isLoading } = useQuery<OrderWithCustomer[]>({
     queryKey: ["/api/orders", { status: statusFilter }],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (statusFilter) params.append("status", statusFilter);
+      if (statusFilter && statusFilter !== "all") params.append("status", statusFilter);
       
       const response = await fetch(`/api/orders?${params.toString()}`, {
         headers: getAuthHeaders(),
@@ -98,7 +98,7 @@ export default function Orders() {
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Statuses</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="confirmed">Confirmed</SelectItem>
                 <SelectItem value="processing">Processing</SelectItem>

@@ -15,8 +15,19 @@ import {
   type InsertWarranty,
   type Vendor, 
   type InsertVendor,
-  type UserRole
+  type UserRole,
+  users,
+  customers, 
+  products,
+  inventory,
+  orders,
+  orderItems,
+  warranties,
+  vendors
 } from "@shared/schema";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import { eq, like, sql, and, gte, lte } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -149,6 +160,8 @@ export class MemStorage implements IStorage {
     const user: User = {
       ...insertUser,
       id,
+      role: insertUser.role || "customer_service",
+      isActive: insertUser.isActive !== undefined ? insertUser.isActive : true,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -187,6 +200,13 @@ export class MemStorage implements IStorage {
     const customer: Customer = {
       ...insertCustomer,
       id,
+      companyName: insertCustomer.companyName || null,
+      phone: insertCustomer.phone || null,
+      taxExempt: insertCustomer.taxExempt || null,
+      creditLimit: insertCustomer.creditLimit || null,
+      paymentTerms: insertCustomer.paymentTerms || null,
+      address: insertCustomer.address || null,
+      isActive: insertCustomer.isActive !== undefined ? insertCustomer.isActive : true,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -229,6 +249,16 @@ export class MemStorage implements IStorage {
     const product: Product = {
       ...insertProduct,
       id,
+      description: insertProduct.description || null,
+      brand: insertProduct.brand || null,
+      costPrice: insertProduct.costPrice || null,
+      weight: insertProduct.weight || null,
+      dimensions: insertProduct.dimensions || null,
+      technicalSpecs: insertProduct.technicalSpecs || null,
+      safetyCompliance: insertProduct.safetyCompliance || null,
+      warrantyMonths: insertProduct.warrantyMonths || null,
+      isSeasonal: insertProduct.isSeasonal || null,
+      isActive: insertProduct.isActive !== undefined ? insertProduct.isActive : true,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -281,6 +311,12 @@ export class MemStorage implements IStorage {
     const inventory: Inventory = {
       ...insertInventory,
       id,
+      quantityOnHand: insertInventory.quantityOnHand || 0,
+      quantityReserved: insertInventory.quantityReserved || 0,
+      quantityAvailable: insertInventory.quantityAvailable || 0,
+      reorderPoint: insertInventory.reorderPoint || null,
+      maxStock: insertInventory.maxStock || null,
+      lastStockCheck: insertInventory.lastStockCheck || null,
       updatedAt: new Date()
     };
     this.inventory.set(id, inventory);
@@ -322,6 +358,14 @@ export class MemStorage implements IStorage {
     const order: Order = {
       ...insertOrder,
       id,
+      status: insertOrder.status || "pending",
+      taxAmount: insertOrder.taxAmount || null,
+      shippingAmount: insertOrder.shippingAmount || null,
+      notes: insertOrder.notes || null,
+      shippingAddress: insertOrder.shippingAddress || null,
+      billingAddress: insertOrder.billingAddress || null,
+      estimatedDelivery: insertOrder.estimatedDelivery || null,
+      actualDelivery: insertOrder.actualDelivery || null,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -386,6 +430,12 @@ export class MemStorage implements IStorage {
     const warranty: Warranty = {
       ...insertWarranty,
       id,
+      status: insertWarranty.status || "active",
+      orderId: insertWarranty.orderId || null,
+      serialNumber: insertWarranty.serialNumber || null,
+      claimDate: insertWarranty.claimDate || null,
+      claimReason: insertWarranty.claimReason || null,
+      resolutionNotes: insertWarranty.resolutionNotes || null,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -435,6 +485,12 @@ export class MemStorage implements IStorage {
     const vendor: Vendor = {
       ...insertVendor,
       id,
+      address: insertVendor.address || null,
+      paymentTerms: insertVendor.paymentTerms || null,
+      contactEmail: insertVendor.contactEmail || null,
+      contactPhone: insertVendor.contactPhone || null,
+      isAuthorizedDealer: insertVendor.isAuthorizedDealer || null,
+      isActive: insertVendor.isActive !== undefined ? insertVendor.isActive : true,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -503,4 +559,18 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+import { DatabaseStorage, createDatabaseStorage } from "./database-storage";
+
+// Use database storage instead of memory storage
+export let storage: IStorage;
+
+// Initialize storage with database connection
+(async () => {
+  try {
+    storage = await createDatabaseStorage();
+    console.log("Database storage initialized successfully");
+  } catch (error) {
+    console.error("Failed to initialize database storage, falling back to memory storage:", error);
+    storage = new MemStorage();
+  }
+})();

@@ -10,13 +10,13 @@ import { WarrantyWithDetails } from "@/types";
 import { useState } from "react";
 
 export default function Warranties() {
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const { data: warranties, isLoading } = useQuery<WarrantyWithDetails[]>({
     queryKey: ["/api/warranties", { status: statusFilter }],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (statusFilter) params.append("status", statusFilter);
+      if (statusFilter && statusFilter !== "all") params.append("status", statusFilter);
       
       const response = await fetch(`/api/warranties?${params.toString()}`, {
         headers: getAuthHeaders(),
@@ -170,7 +170,7 @@ export default function Warranties() {
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Statuses</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="expired">Expired</SelectItem>
                 <SelectItem value="claimed">Claimed</SelectItem>
