@@ -52,12 +52,12 @@ export function Sidebar() {
   const [location] = useLocation();
 
   return (
-    <aside className="w-64 min-h-screen bg-card border-r border-border">
-      <div className="p-6">
+    <aside className="w-64 min-h-screen z-10 fixed bg-card border-r border-border">
+      <div className="p-6 px-6">
         {navigation.map((section) => (
-          <div key={section.title} className="mb-6">
+          <div key={section.title} className="mb-5">
             <h3 className="font-semibold text-foreground mb-3">{section.title}</h3>
-            <nav className="space-y-1">
+            <nav className="space-y-1 mb-4">
               {section.items.map((item) => {
                 const isActive = location === item.href;
                 const Icon = item.icon;

@@ -80,7 +80,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          role: user.role
         }
       });
     } catch (error) {
@@ -190,6 +189,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(products);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
+
+  app.get("/api/products/check-sku", authenticateToken, async (req, res) => {
+    try {
+      const { sku } = req.query;
+      if (!sku || typeof sku !== 'string') {
+        return res.status(400).json({ message: "SKU is required" });
+      }
+      const exists = await storage.checkSkuExists(sku);
+      res.json({ available: !exists, exists });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to check SKU" });
     }
   });
 

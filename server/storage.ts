@@ -50,6 +50,7 @@ export interface IStorage {
   // Product methods
   getProduct(id: string): Promise<Product | undefined>;
   getProductBySku(sku: string): Promise<Product | undefined>;
+  checkSkuExists(sku: string): Promise<boolean>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;
   getAllProducts(): Promise<Product[]>;
@@ -244,6 +245,10 @@ export class MemStorage implements IStorage {
     return Array.from(this.products.values()).find(product => product.sku === sku);
   }
 
+  async checkSkuExists(sku: string): Promise<boolean> {
+    return Array.from(this.products.values()).some(p => p.sku === sku);
+  }
+
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
     const id = randomUUID();
     const product: Product = {
@@ -256,7 +261,7 @@ export class MemStorage implements IStorage {
       dimensions: insertProduct.dimensions || null,
       technicalSpecs: insertProduct.technicalSpecs || null,
       safetyCompliance: insertProduct.safetyCompliance || null,
-      warrantyMonths: insertProduct.warrantyMonths || null,
+      warrantyMonths: insertProduct.warrantyMonths || 12,
       isSeasonal: insertProduct.isSeasonal || null,
       isActive: insertProduct.isActive !== undefined ? insertProduct.isActive : true,
       createdAt: new Date(),
@@ -273,6 +278,7 @@ export class MemStorage implements IStorage {
     const updatedProduct: Product = {
       ...product,
       ...updateData,
+      warrantyMonths: updateData.warrantyMonths || product.warrantyMonths,
       updatedAt: new Date()
     };
     this.products.set(id, updatedProduct);

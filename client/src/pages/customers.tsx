@@ -4,30 +4,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Filter, Building, User, GraduationCap, Landmark } from "lucide-react";
+import { Plus, Search, Filter, Phone, Mail, CreditCard, User, Building, Landmark, GraduationCap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { Customer } from "@shared/schema";
 import { useState } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import * as customerUtils from "@/lib/utils/customer";
 
 export default function Customers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
-
-  const { data: customers, isLoading } = useQuery<Customer[]>({
-    queryKey: ["/api/customers", { search: searchQuery, type: typeFilter }],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (searchQuery) params.append("search", searchQuery);
-      if (typeFilter && typeFilter !== "all") params.append("type", typeFilter);
-      
-      const response = await fetch(`/api/customers?${params.toString()}`, {
-        headers: getAuthHeaders(),
-      });
-      if (!response.ok) throw new Error("Failed to fetch customers");
-      return response.json();
-    },
-  });
 
   const getCustomerTypeIcon = (type: string) => {
     const iconConfig = {
@@ -68,6 +62,172 @@ export default function Customers() {
       currency: 'USD',
     }).format(parseFloat(amount));
   };
+
+  const { data: customers, isLoading, error } = useQuery<Customer[]>({
+    queryKey: ["customers", { search: searchQuery, type: typeFilter }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (searchQuery) params.append("search", searchQuery);
+      if (typeFilter && typeFilter !== "all") params.append("type", typeFilter);
+      
+      const response = await fetch(`/api/customers?${params.toString()}`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch customers");
+      return response.json();
+    },
+    staleTime: 1000 * 60 * 5, // Consider data fresh for 5 minutes
+  });
+
+  return (
+    <DashboardLayout>
+      <div className="h-full flex-1 flex-col space-y-8 p-8 md:flex">
+        <div className="flex items-center justify-between space-y-2">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Customers</h2>
+            <p className="text-muted-foreground">
+              Manage and view all your customer accounts here
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" /> Add Customer
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search customers..."
+                  className="pl-8"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-[180px]">
+                <Filter className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="Filter by type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="individual">Individual</SelectItem>
+                <SelectItem value="professional_contractor">Professional Contractor</SelectItem>
+                <SelectItem value="industrial_account">Industrial Account</SelectItem>
+                <SelectItem value="government_municipal">Government/Municipal</SelectItem>
+                <SelectItem value="educational_institution">Educational Institution</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Customer List</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : error ? (
+                <div className="flex items-center justify-center h-64">
+                  <p className="text-destructive">Error loading customers. Please try again.</p>
+                </div>
+              ) : !customers?.length ? (
+                <div className="flex items-center justify-center h-64">
+                  <p className="text-muted-foreground">No customers found.</p>
+                </div>
+              ) : (
+                <div className="relative overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Contact</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Credit Limit</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {customers.map((customer) => {
+                        const CustomerTypeIcon = customerUtils.getCustomerIcon(customer.customerType);
+                        return (
+                          <TableRow key={customer.id}>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {customer.contactFirstName} {customer.contactLastName}
+                                </span>
+                                {customer.companyName && (
+                                  <span className="text-sm text-muted-foreground">
+                                    {customer.companyName}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <CustomerTypeIcon className="h-4 w-4" />
+                                <Badge variant="secondary" className={customerUtils.getCustomerTypeColor(customer.customerType)}>
+                                  {customerUtils.formatCustomerType(customer.customerType)}
+                                </Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <Mail className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">{customer.email}</span>
+                                </div>
+                                {customer.phone && (
+                                  <div className="flex items-center gap-2">
+                                    <Phone className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-sm">{customer.phone}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {customer.address && typeof customer.address === 'object' && 'city' in customer.address ? (
+                                <div className="flex flex-col">
+                                  <span className="text-sm">{(customer.address as any).city}</span>
+                                  <span className="text-sm text-muted-foreground">{(customer.address as any).state}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">Not provided</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                                {customerUtils.formatCurrency(customer.creditLimit)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={customer.isActive ? "default" : "secondary"}>
+                                {customer.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
 
   const filteredCustomers = customers?.filter(customer => {
     const matchesSearch = !searchQuery || 
@@ -164,7 +324,7 @@ export default function Customers() {
                 </div>
               ))}
             </div>
-          ) : filteredCustomers?.length ? (
+          ) : filteredCustomers && filteredCustomers.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredCustomers.map((customer) => {
                 const { Icon, color, bg } = getCustomerTypeIcon(customer.customerType);

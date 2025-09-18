@@ -198,10 +198,21 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({
   updatedAt: true
 });
 
-export const insertProductSchema = createInsertSchema(products).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
+export const insertProductSchema = z.object({
+  sku: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  category: z.enum(["power_tools", "hand_tools", "safety_equipment", "accessories", "replacement_parts"]),
+  brand: z.string().optional(),
+  price: z.string(),
+  costPrice: z.string().optional(),
+  weight: z.string().optional(),
+  dimensions: z.any().optional(),
+  technicalSpecs: z.any().optional(),
+  safetyCompliance: z.any().optional(),
+  warrantyMonths: z.number().optional(),
+  isActive: z.boolean().optional(),
+  isSeasonal: z.boolean().optional(),
 });
 
 export const insertInventorySchema = createInsertSchema(inventory).omit({

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { 
   type User, 
   type InsertUser, 
@@ -31,10 +32,27 @@ import { IStorage } from "./storage";
 import bcrypt from "bcryptjs";
 
 // Database connection
-const queryClient = postgres(process.env.DATABASE_URL!, {
-  max: 1
+console.log('DATABASE_URL loaded in database-storage:', !!process.env.DATABASE_URL);
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL environment variable is not set');
+}
+
+const queryClient = postgres(process.env.DATABASE_URL, {
+  max: 1,
+  ssl: {
+    rejectUnauthorized: true,
+    require: true
+  },
+  idle_timeout: 20,
+  connect_timeout: 10,
+  connection: {
+    parseInputDatesAsUTC: true,
+    application_name: 'e-dash'
+  }
 });
 const db = drizzle(queryClient);
+
+export { db };
 
 export class DatabaseStorage implements IStorage {
   
@@ -136,13 +154,31 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async checkSkuExists(sku: string): Promise<boolean> {
+    try {
+      const result = await db.select().from(products).where(eq(products.sku, sku)).limit(1);
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error checking SKU existence:', error);
+      return false;
+    }
+  }
+
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
-    const result = await db.insert(products).values(insertProduct).returning();
+    const productWithTypes = {
+      ...insertProduct,
+      warrantyMonths: insertProduct.warrantyMonths || 12
+    };
+    const result = await db.insert(products).values(productWithTypes).returning();
     return result[0];
   }
 
   async updateProduct(id: string, updateData: Partial<InsertProduct>): Promise<Product | undefined> {
-    const result = await db.update(products).set(updateData).where(eq(products.id, id)).returning();
+    const processedUpdateData = {
+      ...updateData,
+      warrantyMonths: updateData.warrantyMonths || undefined
+    };
+    const result = await db.update(products).set(processedUpdateData).where(eq(products.id, id)).returning();
     return result[0];
   }
 
