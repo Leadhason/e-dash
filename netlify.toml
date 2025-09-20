@@ -9,6 +9,10 @@
   SECRETS_SCAN_OMIT_KEYS = "NODE_ENV,PORT"
   SECRETS_SCAN_OMIT_PATHS = "README.md,desc.md,package.json,dist/**,attached_assets/**"
 
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 [context.deploy-preview.environment]
   NODE_ENV = "development"
