@@ -46,11 +46,16 @@ SENDGRID_API_KEY=your-sendgrid-api-key
 ### ✅ Server Configuration  
 - **Development**: Binds to `127.0.0.1:5000` (localhost only)
 - **Production**: Binds to `0.0.0.0:PORT` (Railway compatible)
-- Static file serving already configured
+- **Fixed Path Resolution**: Handles bundled code properly in production
+- Static file serving configured for Railway's file structure
 
 ### ✅ Railway Configuration Files
 - `railway.json`: Railway deployment settings
 - `nixpacks.toml`: Build configuration
+
+### ✅ Path Resolution Fix
+- Fixed `import.meta.dirname` issue in bundled production code
+- Uses `process.cwd()` for reliable path resolution in Railway environment
 
 ## 🧪 Local Testing
 
