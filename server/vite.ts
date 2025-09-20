@@ -3,8 +3,13 @@ import fs from "fs";
 import path from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
-import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Get reliable __dirname equivalent for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const viteLogger = createLogger();
 
@@ -20,6 +25,17 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  // Only used in development - create minimal config to avoid bundling issues
+  const viteConfig = {
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "..", "client", "src"),
+        "@shared": path.resolve(__dirname, "..", "shared"),
+      },
+    },
+    root: path.resolve(__dirname, "..", "client"),
+  };
+  
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
@@ -45,11 +61,7 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
-      const clientTemplate = path.resolve(
-        process.cwd(),
-        "client",
-        "index.html",
-      );
+      const clientTemplate = path.resolve(__dirname, "..", "client", "index.html");
 
       // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
@@ -67,23 +79,27 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // In production, the server is bundled and running from dist/index.js
-  // So we need to go up one level to find the public directory
-  const isProduction = process.env.NODE_ENV === 'production';
-  const distPath = isProduction 
-    ? path.resolve(process.cwd(), "dist", "public")
-    : path.resolve(import.meta.dirname, "public");
+  // Use reliable path resolution for production
+  const staticPath = path.join(__dirname, "public");
+  
+  // Add debugging information
+  console.log('Current working directory:', process.cwd());
+  console.log('__dirname:', __dirname);
+  console.log('Static path:', staticPath);
+  console.log('Static directory exists:', fs.existsSync(staticPath));
 
-  if (!fs.existsSync(distPath)) {
+  if (!fs.existsSync(staticPath)) {
     throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
+      `Could not find the build directory: ${staticPath}, make sure to build the client first`,
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(staticPath));
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+    const indexPath = path.join(staticPath, "index.html");
+    console.log('Serving index.html from:', indexPath);
+    res.sendFile(indexPath);
   });
 }
