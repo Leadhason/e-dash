@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
   insertUserSchema, 
-  insertCustomerSchema, 
+  insertCustomerSchema,
+  insertCategorySchema,
   insertProductSchema,
   insertInventorySchema,
   insertOrderSchema,
@@ -172,6 +173,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Category routes with performance optimizations
+  app.get("/api/categories", authenticateToken, async (req, res) => {
+    try {
+      const activeOnly = req.query.active === 'true';
+      const includeProductCount = req.query.includeProductCount === 'true';
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      
+      let categories;
+      if (includeProductCount) {
+        categories = await storage.getCategoriesWithProductCount(activeOnly, limit);
+      } else if (activeOnly) {
+        categories = await storage.getActiveCategories();
+      } else {
+        categories = await storage.getAllCategories();
+      }
+      
+      // Set cache headers for better performance
+      res.set('Cache-Control', 'public, max-age=300'); // 5 minutes
+      res.json(categories);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      res.status(500).json({ message: "Failed to fetch categories" });
+    }
+  });
+
+  // Get minimal categories for dropdowns and forms
+  app.get("/api/categories/minimal", authenticateToken, async (req, res) => {
+    try {
+      const categories = await storage.getCategoriesMinimal();
+      
+      // Longer cache for minimal data
+      res.set('Cache-Control', 'public, max-age=900'); // 15 minutes
+      res.json(categories);
+    } catch (error) {
+      console.error('Error fetching minimal categories:', error);
+      res.status(500).json({ message: "Failed to fetch minimal categories" });
+    }
+  });
+
+  app.get("/api/categories/check-slug", authenticateToken, async (req, res) => {
+    try {
+      const { slug } = req.query;
+      if (!slug || typeof slug !== 'string') {
+        return res.status(400).json({ message: "Slug is required" });
+      }
+      const exists = await storage.checkSlugExists(slug);
+      res.json({ available: !exists, exists });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to check slug" });
+    }
+  });
+
+  app.post("/api/categories", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      const categoryData = insertCategorySchema.parse(req.body);
+      const category = await storage.createCategory(categoryData);
+      res.status(201).json(category);
+    } catch (error) {
+      console.error('Category creation error:', error);
+      res.status(400).json({ message: "Invalid category data" });
+    }
+  });
+
+  app.get("/api/categories/:id", authenticateToken, async (req, res) => {
+    try {
+      const category = await storage.getCategory(req.params.id);
+      if (!category) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+      res.json(category);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch category" });
+    }
+  });
+
+  // Get product count for a category
+  app.get("/api/categories/:id/product-count", authenticateToken, async (req, res) => {
+    try {
+      const products = await storage.getProductsByCategory(req.params.id);
+      res.json({ count: products.length });
+    } catch (error) {
+      console.error('Product count fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch product count" });
+    }
+  });
+
+  app.put("/api/categories/:id", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      const categoryData = insertCategorySchema.partial().parse(req.body);
+      const category = await storage.updateCategory(req.params.id, categoryData);
+      if (!category) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+      res.json(category);
+    } catch (error) {
+      console.error('Category update error:', error);
+      res.status(400).json({ message: "Invalid category data" });
+    }
+  });
+
+  app.delete("/api/categories/:id", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      console.log('DELETE /api/categories/:id called with ID:', req.params.id);
+      const deleted = await storage.deleteCategory(req.params.id);
+      console.log('Delete result:', deleted);
+      if (!deleted) {
+        console.log('Category not found for deletion');
+        return res.status(404).json({ message: "Category not found" });
+      }
+      console.log('Category deleted successfully, sending 204');
+      res.status(204).send();
+    } catch (error) {
+      console.error('Category deletion error:', error);
+      res.status(500).json({ message: "Failed to delete category" });
+    }
+  });
+
   // Product routes
   app.get("/api/products", authenticateToken, async (req, res) => {
     try {
@@ -210,6 +328,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const productData = insertProductSchema.parse(req.body);
       const product = await storage.createProduct(productData);
       res.status(201).json(product);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid product data" });
+    }
+  });
+
+  app.put("/api/products/:id", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      const productData = insertProductSchema.partial().parse(req.body);
+      const product = await storage.updateProduct(req.params.id, productData);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      res.json(product);
     } catch (error) {
       res.status(400).json({ message: "Invalid product data" });
     }

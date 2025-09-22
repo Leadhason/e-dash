@@ -8,6 +8,13 @@
       "when": 1757637329858,
       "tag": "0000_stiff_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1758394163153,
+      "tag": "0002_rare_chimera",
+      "breakpoints": true
     }
   ]
 }

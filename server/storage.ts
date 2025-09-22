@@ -3,6 +3,8 @@ import {
   type InsertUser, 
   type Customer, 
   type InsertCustomer,
+  type Category,
+  type InsertCategory,
   type Product, 
   type InsertProduct,
   type Inventory, 
@@ -17,7 +19,8 @@ import {
   type InsertVendor,
   type UserRole,
   users,
-  customers, 
+  customers,
+  categories,
   products,
   inventory,
   orders,
@@ -47,12 +50,25 @@ export interface IStorage {
   getAllCustomers(): Promise<Customer[]>;
   getCustomersByType(type: string): Promise<Customer[]>;
 
+  // Category methods
+  getCategory(id: string): Promise<Category | undefined>;
+  getCategoryBySlug(slug: string): Promise<Category | undefined>;
+  createCategory(category: InsertCategory): Promise<Category>;
+  updateCategory(id: string, category: Partial<InsertCategory>): Promise<Category | undefined>;
+  deleteCategory(id: string): Promise<boolean>;
+  getAllCategories(): Promise<Category[]>;
+  getActiveCategories(): Promise<Category[]>;
+  getCategoriesWithProductCount(activeOnly?: boolean, limit?: number): Promise<(Category & { productCount: number })[]>;
+  getCategoriesMinimal(): Promise<{ id: string; name: string; slug: string }[]>;
+  checkSlugExists(slug: string): Promise<boolean>;
+
   // Product methods
   getProduct(id: string): Promise<Product | undefined>;
   getProductBySku(sku: string): Promise<Product | undefined>;
   checkSkuExists(sku: string): Promise<boolean>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;
+  deleteProduct(id: string): Promise<boolean>;
   getAllProducts(): Promise<Product[]>;
   getProductsByCategory(category: string): Promise<Product[]>;
   searchProducts(query: string): Promise<Product[]>;
@@ -106,6 +122,7 @@ export interface IStorage {
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private customers: Map<string, Customer>;
+  private categories: Map<string, Category>;
   private products: Map<string, Product>;
   private inventory: Map<string, Inventory>;
   private orders: Map<string, Order>;
@@ -116,6 +133,7 @@ export class MemStorage implements IStorage {
   constructor() {
     this.users = new Map();
     this.customers = new Map();
+    this.categories = new Map();
     this.products = new Map();
     this.inventory = new Map();
     this.orders = new Map();
@@ -236,6 +254,104 @@ export class MemStorage implements IStorage {
     return Array.from(this.customers.values()).filter(customer => customer.customerType === type);
   }
 
+  // Category methods
+  async getCategory(id: string): Promise<Category | undefined> {
+    return this.categories.get(id);
+  }
+
+  async getCategoryBySlug(slug: string): Promise<Category | undefined> {
+    return Array.from(this.categories.values()).find(category => category.slug === slug);
+  }
+
+  async createCategory(insertCategory: InsertCategory): Promise<Category> {
+    const id = randomUUID();
+    const category: Category = {
+      ...insertCategory,
+      id,
+      description: insertCategory.description || null,
+      isActive: insertCategory.isActive !== undefined ? insertCategory.isActive : true,
+      sortOrder: insertCategory.sortOrder || 0,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.categories.set(id, category);
+    return category;
+  }
+
+  async updateCategory(id: string, updateData: Partial<InsertCategory>): Promise<Category | undefined> {
+    const category = this.categories.get(id);
+    if (!category) return undefined;
+
+    const updatedCategory: Category = {
+      ...category,
+      ...updateData,
+      updatedAt: new Date()
+    };
+    this.categories.set(id, updatedCategory);
+    return updatedCategory;
+  }
+
+  async deleteCategory(id: string): Promise<boolean> {
+    // First, delete all products in this category
+    const productsInCategory = await this.getProductsByCategory(id);
+    for (const product of productsInCategory) {
+      await this.deleteProduct(product.id);
+    }
+    
+    // Then delete the category
+    const deleted = this.categories.delete(id);
+    return deleted;
+  }
+
+  async getAllCategories(): Promise<Category[]> {
+    return Array.from(this.categories.values()).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  }
+
+  async getActiveCategories(): Promise<Category[]> {
+    return Array.from(this.categories.values())
+      .filter(category => category.isActive)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  }
+
+  async checkSlugExists(slug: string): Promise<boolean> {
+    return Array.from(this.categories.values()).some(c => c.slug === slug);
+  }
+
+  async getCategoriesWithProductCount(activeOnly = false, limit?: number): Promise<(Category & { productCount: number })[]> {
+    let categoriesArray = Array.from(this.categories.values());
+    
+    if (activeOnly) {
+      categoriesArray = categoriesArray.filter(c => c.isActive);
+    }
+    
+    categoriesArray.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
+    
+    if (limit) {
+      categoriesArray = categoriesArray.slice(0, limit);
+    }
+    
+    return categoriesArray.map(category => {
+      const productCount = Array.from(this.products.values())
+        .filter(p => p.categoryId === category.id && p.isActive).length;
+      
+      return {
+        ...category,
+        productCount
+      };
+    });
+  }
+
+  async getCategoriesMinimal(): Promise<{ id: string; name: string; slug: string }[]> {
+    return Array.from(this.categories.values())
+      .filter(c => c.isActive)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name))
+      .map(c => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug
+      }));
+  }
+
   // Product methods
   async getProduct(id: string): Promise<Product | undefined> {
     return this.products.get(id);
@@ -255,14 +371,9 @@ export class MemStorage implements IStorage {
       ...insertProduct,
       id,
       description: insertProduct.description || null,
+      detailedSpecifications: insertProduct.detailedSpecifications || null,
       brand: insertProduct.brand || null,
       costPrice: insertProduct.costPrice || null,
-      weight: insertProduct.weight || null,
-      dimensions: insertProduct.dimensions || null,
-      technicalSpecs: insertProduct.technicalSpecs || null,
-      safetyCompliance: insertProduct.safetyCompliance || null,
-      warrantyMonths: insertProduct.warrantyMonths || 12,
-      isSeasonal: insertProduct.isSeasonal || null,
       isActive: insertProduct.isActive !== undefined ? insertProduct.isActive : true,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -278,11 +389,14 @@ export class MemStorage implements IStorage {
     const updatedProduct: Product = {
       ...product,
       ...updateData,
-      warrantyMonths: updateData.warrantyMonths || product.warrantyMonths,
       updatedAt: new Date()
     };
     this.products.set(id, updatedProduct);
     return updatedProduct;
+  }
+
+  async deleteProduct(id: string): Promise<boolean> {
+    return this.products.delete(id);
   }
 
   async getAllProducts(): Promise<Product[]> {
@@ -290,7 +404,7 @@ export class MemStorage implements IStorage {
   }
 
   async getProductsByCategory(category: string): Promise<Product[]> {
-    return Array.from(this.products.values()).filter(product => product.category === category);
+    return Array.from(this.products.values()).filter(product => product.categoryId === category);
   }
 
   async searchProducts(query: string): Promise<Product[]> {
@@ -573,10 +687,13 @@ export let storage: IStorage;
 // Initialize storage with database connection
 (async () => {
   try {
+    console.log("Attempting to initialize database storage...");
     storage = await createDatabaseStorage();
     console.log("Database storage initialized successfully");
   } catch (error) {
     console.error("Failed to initialize database storage, falling back to memory storage:", error);
+    console.log("Initializing memory storage as fallback...");
     storage = new MemStorage();
+    console.log("Memory storage initialized successfully");
   }
 })();

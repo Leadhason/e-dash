@@ -6,12 +6,21 @@ import { RecentOrders } from "@/components/dashboard/recent-orders";
 import { SystemAlerts } from "@/components/dashboard/system-alerts";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { Button } from "@/components/ui/button";
-import { Download, Plus } from "lucide-react";
+import { Download, Plus, MoreHorizontal } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { DashboardMetrics } from "@/types";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Dashboard() {
+  const isMobile = useIsMobile();
+  
   const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
     queryKey: ["/api/dashboard/metrics"],
     queryFn: async () => {
@@ -25,47 +34,86 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      {/* Page Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Dashboard Overview</h1>
-            <p className="text-muted-foreground mt-1">
-              Monitor your tools and power technologies e-commerce operations
+      {/* Page Header - Mobile Responsive */}
+      <div className="mb-4 md:mb-6">
+        <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground truncate">
+              Dashboard Overview
+            </h1>
+            <p className="text-sm md:text-base text-muted-foreground mt-1">
+              {isMobile 
+                ? "Monitor your e-commerce operations" 
+                : "Monitor your tools and power technologies e-commerce operations"
+              }
             </p>
           </div>
-          <div className="flex items-center space-x-3">
-            <Button variant="outline" data-testid="export-report-button">
-              <Download className="mr-2 h-4 w-4" />
-              Export Report
-            </Button>
-            <Button data-testid="quick-action-button">
-              <Plus className="mr-2 h-4 w-4" />
-              Quick Action
-            </Button>
+          
+          {/* Action Buttons - Responsive */}
+          <div className="flex items-center justify-end space-x-2 md:space-x-3">
+            {isMobile ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem data-testid="export-report-button">
+                    <Download className="mr-2 h-4 w-4" />
+                    Export Report
+                  </DropdownMenuItem>
+                  <DropdownMenuItem data-testid="quick-action-button">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Quick Action
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button variant="outline" data-testid="export-report-button">
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Report
+                </Button>
+                <Button data-testid="quick-action-button">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Quick Action
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Key Metrics Cards */}
-      <div className="mb-8">
+      {/* Key Metrics Cards - Responsive Grid */}
+      <div className="mb-6 md:mb-8">
         <MetricsGrid metrics={metrics} isLoading={metricsLoading} />
       </div>
 
-      {/* Charts and Data Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <SalesChart />
-        <CategoryPerformance />
+      {/* Charts Section - Responsive Layout */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
+        <div className="order-1">
+          <SalesChart />
+        </div>
+        <div className="order-2">
+          <CategoryPerformance />
+        </div>
       </div>
 
-      {/* Recent Activity and Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <RecentOrders />
-        <SystemAlerts />
+      {/* Activity and Alerts - Mobile Stack, Desktop Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
+        <div className={`order-1 ${isMobile ? 'col-span-1' : 'lg:col-span-1 xl:col-span-2'}`}>
+          <RecentOrders />
+        </div>
+        <div className="order-2">
+          <SystemAlerts />
+        </div>
       </div>
 
       {/* Quick Actions Section */}
-      <QuickActions />
+      <div className="order-last">
+        <QuickActions />
+      </div>
     </DashboardLayout>
   );
 }

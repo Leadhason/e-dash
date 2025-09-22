@@ -47,14 +47,6 @@ export const warrantyStatusEnum = pgEnum("warranty_status", [
   "voided"
 ]);
 
-export const categoryEnum = pgEnum("category", [
-  "power_tools",
-  "hand_tools", 
-  "safety_equipment",
-  "accessories",
-  "replacement_parts"
-]);
-
 // Users table
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -87,23 +79,31 @@ export const customers = pgTable("customers", {
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
+// Categories table
+export const categories = pgTable("categories", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  slug: varchar("slug", { length: 100 }).notNull().unique(),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+
 // Products table
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   sku: varchar("sku", { length: 100 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  category: categoryEnum("category").notNull(),
+  detailedSpecifications: text("detailed_specifications"),
+  categoryId: uuid("category_id").notNull().references(() => categories.id),
   brand: varchar("brand", { length: 100 }),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  images: jsonb("images").$type<string[]>().default(sql`'[]'::jsonb`), // Array of image URLs
+  sellingPrice: decimal("selling_price", { precision: 10, scale: 2 }).notNull(),
   costPrice: decimal("cost_price", { precision: 10, scale: 2 }),
-  weight: decimal("weight", { precision: 8, scale: 2 }),
-  dimensions: jsonb("dimensions"), // Store width, height, depth
-  technicalSpecs: jsonb("technical_specs"), // Voltage, amperage, torque, etc.
-  safetyCompliance: jsonb("safety_compliance"), // UL, OSHA, CE certifications
-  warrantyMonths: integer("warranty_months").default(12),
   isActive: boolean("is_active").notNull().default(true),
-  isSeasonal: boolean("is_seasonal").default(false),
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
@@ -198,21 +198,27 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({
   updatedAt: true
 });
 
+export const insertCategorySchema = createInsertSchema(categories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
 export const insertProductSchema = z.object({
-  sku: z.string().min(1),
-  name: z.string().min(1),
+  sku: z.string()
+    .min(1, "SKU is required")
+    .max(100, "SKU must be less than 100 characters"),
+  name: z.string()
+    .min(1, "Product name is required")
+    .max(255, "Product name must be less than 255 characters"),
   description: z.string().optional(),
-  category: z.enum(["power_tools", "hand_tools", "safety_equipment", "accessories", "replacement_parts"]),
+  detailedSpecifications: z.string().optional(),
+  categoryId: z.string().uuid("Please select a valid category"),
   brand: z.string().optional(),
-  price: z.string(),
+  images: z.array(z.string()).max(4, "Maximum 4 images allowed").default([]),
+  sellingPrice: z.string().min(1, "Selling price is required"),
   costPrice: z.string().optional(),
-  weight: z.string().optional(),
-  dimensions: z.any().optional(),
-  technicalSpecs: z.any().optional(),
-  safetyCompliance: z.any().optional(),
-  warrantyMonths: z.number().optional(),
-  isActive: z.boolean().optional(),
-  isSeasonal: z.boolean().optional(),
+  isActive: z.boolean().default(true),
 });
 
 export const insertInventorySchema = createInsertSchema(inventory).omit({
@@ -254,6 +260,8 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Customer = typeof customers.$inferSelect;
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
+export type Category = typeof categories.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
 export type InsertInventory = z.infer<typeof insertInventorySchema>;

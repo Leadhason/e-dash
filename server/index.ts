@@ -1,10 +1,25 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import 'dotenv/config';
+import { config } from 'dotenv';
+
+// Load environment variables from .env.local
+config({ path: '.env.local' });
+
+// Add process event handlers to catch unhandled errors
+process.on('uncaughtException', (error) => {
+  console.error('[Process] Uncaught Exception:', error);
+  console.error('[Process] Stack:', error.stack);
+  // Don't exit - just log the error
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Process] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit - just log the error
+});
 
 console.log('DB URL loaded:', !!process.env.DATABASE_URL);
-console.log('DB URL loaded:', !!process.env.PORT);
+console.log('PORT loaded:', !!process.env.PORT);
 
 const app = express();
 app.use(express.json());
@@ -41,22 +56,35 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  console.log('[Server] Environment mode:', app.get("env"));
+  console.log('[Server] NODE_ENV:', process.env.NODE_ENV);
+  console.log('[Server] Starting server setup...');
+  
   const server = await registerRoutes(app);
+  console.log('[Server] Routes registered successfully');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    console.error('[Error Handler] Error occurred:', err);
+    console.error('[Error Handler] Status:', status);
+    console.error('[Error Handler] Message:', message);
+
     res.status(status).json({ message });
-    throw err;
+    // Don't throw error - just log it to prevent process exit
+    console.error('[Error Handler] Error handled, continuing...');
   });
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    console.log('[Server] Setting up Vite for development...');
     await setupVite(app, server);
+    console.log('[Server] Vite setup completed');
   } else {
+    console.log('[Server] Setting up static file serving for production...');
     serveStatic(app);
   }
 

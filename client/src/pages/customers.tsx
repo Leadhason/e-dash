@@ -324,9 +324,9 @@ export default function Customers() {
                 </div>
               ))}
             </div>
-          ) : filteredCustomers && filteredCustomers.length > 0 ? (
+          ) : filteredCustomers?.length ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredCustomers.map((customer) => {
+              {filteredCustomers?.map((customer) => {
                 const { Icon, color, bg } = getCustomerTypeIcon(customer.customerType);
                 
                 return (

@@ -25,6 +25,10 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  console.log("[setupVite] Starting Vite setup...");
+  console.log("[setupVite] __dirname:", __dirname);
+  console.log("[setupVite] Client root path:", path.resolve(__dirname, "..", "client"));
+  
   // Only used in development - create minimal config to avoid bundling issues
   const viteConfig = {
     resolve: {
@@ -42,6 +46,9 @@ export async function setupVite(app: Express, server: Server) {
     allowedHosts: true as const,
   };
 
+  console.log("[setupVite] Creating Vite server with config:", JSON.stringify(viteConfig, null, 2));
+  console.log("[setupVite] Server options:", JSON.stringify(serverOptions, null, 2));
+
   const vite = await createViteServer({
     ...viteConfig,
     configFile: false,
@@ -49,14 +56,17 @@ export async function setupVite(app: Express, server: Server) {
       ...viteLogger,
       error: (msg, options) => {
         viteLogger.error(msg, options);
-        process.exit(1);
+        console.error("[setupVite] Vite error occurred, but NOT exiting process");
+        // Don't exit process on vite errors - let server continue
       },
     },
     server: serverOptions,
     appType: "custom",
   });
 
+  console.log("[setupVite] Vite server created successfully");
   app.use(vite.middlewares);
+  console.log("[setupVite] Vite middlewares added to Express");
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 

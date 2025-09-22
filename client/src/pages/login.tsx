@@ -68,6 +68,7 @@ export default function Login() {
                         placeholder="Enter your username" 
                         {...field}
                         data-testid="username-input"
+                        className="border border-gray-300"
                       />
                     </FormControl>
                     <FormMessage />
@@ -86,6 +87,7 @@ export default function Login() {
                         placeholder="Enter your password" 
                         {...field}
                         data-testid="password-input"
+                        className="border border-gray-300"
                       />
                     </FormControl>
                     <FormMessage />
@@ -94,7 +96,7 @@ export default function Login() {
               />
               <Button 
                 type="submit" 
-                className="w-full" 
+                className="w-full bg-black text-white hover:bg-gray-800" 
                 disabled={isLoading}
                 data-testid="login-button"
               >

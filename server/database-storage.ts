@@ -1,9 +1,11 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
 import { 
   type User, 
   type InsertUser, 
   type Customer, 
   type InsertCustomer,
+  type Category,
+  type InsertCategory,
   type Product, 
   type InsertProduct,
   type Inventory, 
@@ -17,7 +19,8 @@ import {
   type Vendor, 
   type InsertVendor,
   users,
-  customers, 
+  customers,
+  categories,
   products,
   inventory,
   orders,
@@ -31,6 +34,9 @@ import { eq, like, sql, and, gte, lte, ilike, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
 import bcrypt from "bcryptjs";
 
+// Load environment variables from .env.local
+config({ path: '.env.local' });
+
 // Database connection
 console.log('DATABASE_URL loaded in database-storage:', !!process.env.DATABASE_URL);
 if (!process.env.DATABASE_URL) {
@@ -40,15 +46,21 @@ if (!process.env.DATABASE_URL) {
 const queryClient = postgres(process.env.DATABASE_URL, {
   max: 1,
   ssl: {
-    rejectUnauthorized: true,
+    rejectUnauthorized: false,
     require: true
   },
   idle_timeout: 20,
-  connect_timeout: 10,
+  connect_timeout: 60, // Increased for serverless databases
+  prepare: false, // Disable prepared statements for better compatibility
+  transform: {
+    undefined: null,
+  },
   connection: {
     parseInputDatesAsUTC: true,
     application_name: 'e-dash'
-  }
+  },
+  onnotice: () => {}, // Suppress notices
+  debug: false // Disable debug logging
 });
 const db = drizzle(queryClient);
 
@@ -59,6 +71,9 @@ export class DatabaseStorage implements IStorage {
   // Initialize with default admin user
   async initializeDefaultData() {
     try {
+      // Test database connection first
+      await db.execute(sql`SELECT 1`);
+      
       // Check if admin user already exists
       const existingAdmin = await db
         .select()
@@ -78,9 +93,14 @@ export class DatabaseStorage implements IStorage {
           role: "super_admin",
           isActive: true
         });
+        console.log("Default admin user created successfully");
+      } else {
+        console.log("Admin user already exists, skipping initialization");
       }
     } catch (error) {
       console.error("Failed to initialize default data:", error);
+      // Don't throw the error, just log it so the app can continue without database
+      console.log("Continuing without database initialization...");
     }
   }
 
@@ -143,6 +163,122 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(customers).where(eq(customers.customerType, type as any));
   }
 
+  // Category methods
+  async getCategory(id: string): Promise<Category | undefined> {
+    const result = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getCategoryBySlug(slug: string): Promise<Category | undefined> {
+    const result = await db.select().from(categories).where(eq(categories.slug, slug)).limit(1);
+    return result[0];
+  }
+
+  async createCategory(insertCategory: InsertCategory): Promise<Category> {
+    const result = await db.insert(categories).values(insertCategory).returning();
+    return result[0];
+  }
+
+  async updateCategory(id: string, updateData: Partial<InsertCategory>): Promise<Category | undefined> {
+    const result = await db
+      .update(categories)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(categories.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteCategory(id: string): Promise<boolean> {
+    try {
+      // First, delete all products in this category
+      await db.delete(products).where(eq(products.categoryId, id));
+      
+      // Then delete the category
+      const result = await db.delete(categories).where(eq(categories.id, id)).returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      return false;
+    }
+  }
+
+  async getAllCategories(): Promise<Category[]> {
+    return await db.select().from(categories).orderBy(categories.sortOrder);
+  }
+
+  async getActiveCategories(): Promise<Category[]> {
+    return await db.select().from(categories)
+      .where(eq(categories.isActive, true))
+      .orderBy(categories.sortOrder);
+  }
+
+  async checkSlugExists(slug: string): Promise<boolean> {
+    try {
+      const result = await db.select().from(categories).where(eq(categories.slug, slug)).limit(1);
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error checking slug existence:', error);
+      return false;
+    }
+  }
+
+  async getCategoriesWithProductCount(activeOnly = false, limit?: number): Promise<(Category & { productCount: number })[]> {
+    try {
+      let baseQuery = db.select().from(categories);
+      
+      if (activeOnly) {
+        baseQuery = baseQuery.where(eq(categories.isActive, true));
+      }
+      
+      baseQuery = baseQuery.orderBy(categories.sortOrder, categories.name);
+      
+      if (limit) {
+        baseQuery = baseQuery.limit(limit);
+      }
+      
+      const categoriesData = await baseQuery;
+      
+      // Efficient batch query for product counts
+      const productCounts = await db
+        .select({
+          categoryId: products.categoryId,
+          count: sql<number>`count(*)::int`
+        })
+        .from(products)
+        .where(eq(products.isActive, true))
+        .groupBy(products.categoryId);
+      
+      const countMap = new Map(
+        productCounts.map(pc => [pc.categoryId, pc.count])
+      );
+      
+      return categoriesData.map(cat => ({
+        ...cat,
+        productCount: countMap.get(cat.id) || 0
+      }));
+    } catch (error) {
+      console.error('Error fetching categories with product count:', error);
+      throw error;
+    }
+  }
+
+  async getCategoriesMinimal(): Promise<{ id: string; name: string; slug: string }[]> {
+    try {
+      return await db
+        .select({
+          id: categories.id,
+          name: categories.name,
+          slug: categories.slug
+        })
+        .from(categories)
+        .where(eq(categories.isActive, true))
+        .orderBy(categories.sortOrder, categories.name);
+    } catch (error) {
+      console.error('Error fetching minimal categories:', error);
+      throw error;
+    }
+  }
+
   // Product methods
   async getProduct(id: string): Promise<Product | undefined> {
     const result = await db.select().from(products).where(eq(products.id, id)).limit(1);
@@ -165,21 +301,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
-    const productWithTypes = {
-      ...insertProduct,
-      warrantyMonths: insertProduct.warrantyMonths || 12
-    };
-    const result = await db.insert(products).values(productWithTypes).returning();
+    const result = await db.insert(products).values(insertProduct).returning();
     return result[0];
   }
 
   async updateProduct(id: string, updateData: Partial<InsertProduct>): Promise<Product | undefined> {
-    const processedUpdateData = {
-      ...updateData,
-      warrantyMonths: updateData.warrantyMonths || undefined
-    };
-    const result = await db.update(products).set(processedUpdateData).where(eq(products.id, id)).returning();
+    const result = await db.update(products).set(updateData).where(eq(products.id, id)).returning();
     return result[0];
+  }
+
+  async deleteProduct(id: string): Promise<boolean> {
+    try {
+      const result = await db.delete(products).where(eq(products.id, id)).returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      return false;
+    }
   }
 
   async getAllProducts(): Promise<Product[]> {
@@ -187,7 +325,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductsByCategory(category: string): Promise<Product[]> {
-    return await db.select().from(products).where(eq(products.category, category as any));
+    return await db.select().from(products).where(eq(products.categoryId, category));
   }
 
   async searchProducts(query: string): Promise<Product[]> {
