@@ -25,7 +25,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const currentUser = await authApi.getCurrentUser();
           setUser(currentUser);
         } catch (error) {
+          // Token is invalid or expired, clear it
+          console.log("Auth token invalid, clearing...");
           localStorage.removeItem("auth_token");
+          setUser(null);
         }
       }
       setIsLoading(false);

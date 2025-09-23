@@ -13,6 +13,9 @@ interface SidebarContextType {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   toggle: () => void;
+  isCollapsed: boolean;
+  setIsCollapsed: (collapsed: boolean) => void;
+  toggleCollapsed: () => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
@@ -30,6 +33,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [, setLocation] = useLocation();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Close sidebar when switching to mobile
   useEffect(() => {
@@ -48,6 +52,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     isOpen: sidebarOpen,
     setIsOpen: setSidebarOpen,
     toggle: () => setSidebarOpen(!sidebarOpen),
+    isCollapsed: sidebarCollapsed,
+    setIsCollapsed: setSidebarCollapsed,
+    toggleCollapsed: () => setSidebarCollapsed(!sidebarCollapsed),
   };
 
   if (isLoading) {
@@ -80,7 +87,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           )}
           <main className={`
             flex-1 min-h-[calc(100vh-4rem)]
-            ${isMobile ? 'ml-0' : 'ml-64'}
+            ${
+              isMobile 
+                ? 'ml-0' 
+                : sidebarCollapsed 
+                  ? 'ml-16' 
+                  : 'ml-64'
+            }
             transition-all duration-300 ease-in-out
             p-4 md:p-6
           `}>

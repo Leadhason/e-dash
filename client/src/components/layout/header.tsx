@@ -53,7 +53,7 @@ export function DashboardHeader() {
           <div className="flex items-center space-x-2">
             <i className="fas fa-tools text-primary text-lg md:text-xl"></i>
             <span className="font-bold text-base md:text-lg text-foreground truncate">
-              {isMobile ? "Tools & Power" : "Tools & Power Tech"}
+              {isMobile ? "EDMAX" : "EDMAX"}
             </span>
           </div>
           
