@@ -254,19 +254,26 @@ export class DatabaseStorage implements IStorage {
 
   async getCategoriesWithProductCount(activeOnly = false, limit?: number): Promise<(Category & { productCount: number })[]> {
     try {
-      let baseQuery = db.select().from(categories);
+      // Build the complete query based on conditions
+      let categoriesData;
       
-      if (activeOnly) {
-        baseQuery = baseQuery.where(eq(categories.isActive, true));
+      if (activeOnly && limit) {
+        categoriesData = await db.select().from(categories)
+          .where(eq(categories.isActive, true))
+          .orderBy(categories.sortOrder, categories.name)
+          .limit(limit);
+      } else if (activeOnly) {
+        categoriesData = await db.select().from(categories)
+          .where(eq(categories.isActive, true))
+          .orderBy(categories.sortOrder, categories.name);
+      } else if (limit) {
+        categoriesData = await db.select().from(categories)
+          .orderBy(categories.sortOrder, categories.name)
+          .limit(limit);
+      } else {
+        categoriesData = await db.select().from(categories)
+          .orderBy(categories.sortOrder, categories.name);
       }
-      
-      baseQuery = baseQuery.orderBy(categories.sortOrder, categories.name);
-      
-      if (limit) {
-        baseQuery = baseQuery.limit(limit);
-      }
-      
-      const categoriesData = await baseQuery;
       
       // For each category, count products that include this category in their categoryIds array
       const categoriesWithCounts = await Promise.all(
@@ -529,8 +536,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSupplier(id: string): Promise<boolean> {
-    const result = await db.delete(suppliers).where(eq(suppliers.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+    const result = await db.delete(suppliers).where(eq(suppliers.id, id)).returning();
+    return result.length > 0;
   }
 
   async getAllSuppliers(): Promise<Supplier[]> {
@@ -562,8 +569,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProductVariant(id: string): Promise<boolean> {
-    const result = await db.delete(productVariants).where(eq(productVariants.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+    const result = await db.delete(productVariants).where(eq(productVariants.id, id)).returning();
+    return result.length > 0;
   }
 
   async getProductVariantsByProduct(productId: string): Promise<ProductVariant[]> {
@@ -615,8 +622,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProductReview(id: string): Promise<boolean> {
-    const result = await db.delete(productReviews).where(eq(productReviews.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+    const result = await db.delete(productReviews).where(eq(productReviews.id, id)).returning();
+    return result.length > 0;
   }
 
   async getProductReviewsByProduct(productId: string): Promise<ProductReview[]> {

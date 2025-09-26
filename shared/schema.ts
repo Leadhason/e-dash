@@ -63,6 +63,7 @@ export const customers = pgTable("customers", {
   firstName: varchar("first_name", { length: 100 }),
   lastName: varchar("last_name", { length: 100 }),
   phone: varchar("phone", { length: 20 }),
+  customerType: varchar("customer_type", { length: 50 }).notNull().default("regular"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -272,29 +273,34 @@ export const insertProductSchema = z.object({
   detailedSpecifications: z.string().min(1, "Detailed specifications are required"),
   categoryIds: z.array(z.string().uuid()).min(1, "At least one category is required"),
   brand: z.string().min(1, "Brand is required"),
-  costPrice: z.string().min(1, "Cost price is required"),
-  sellingPrice: z.string().min(1, "Selling price is required"),
-  originalPrice: z.string().optional(),
+  costPrice: z.number().positive("Cost price is required").transform((val) => val.toString()),
+  sellingPrice: z.number().positive("Selling price is required").transform((val) => val.toString()),
   discountPercentage: z.number().min(0).max(100).optional(),
-  weight: z.string().optional(),
+  weight: z.number().positive().optional().transform((val) => val !== undefined ? val.toString() : undefined),
   dimensions: z.object({
     length: z.number().positive(),
     width: z.number().positive(),
     height: z.number().positive(),
-    unit: z.string()
+    unit: z.enum(["cm", "in"])
   }).optional(),
-  images: z.array(z.string()).length(4, "Exactly 4 images are required"),
-  stockQuantity: z.number().min(0, "Stock quantity cannot be negative"),
-  lowStockThreshold: z.number().min(0, "Low stock threshold cannot be negative"),
+  images: z.array(z.string()).max(4, "Maximum 4 images allowed").default([]),
+  stockQuantity: z.number().min(0, "Stock quantity cannot be negative").default(0),
+  lowStockThreshold: z.number().min(0, "Low stock threshold cannot be negative").default(10),
   isActive: z.boolean().default(true),
   supplierId: z.string().uuid().optional(),
   tags: z.array(z.string()).default([])
 });
 
-export const insertProductVariantSchema = createInsertSchema(productVariants).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
+export const insertProductVariantSchema = z.object({
+  productId: z.string().uuid("Product ID must be a valid UUID"),
+  sku: z.string().min(1, "SKU is required").max(100, "SKU must be less than 100 characters"),
+  attributes: z.array(z.object({
+    type: z.string().min(1, "Attribute type is required"),
+    value: z.string().min(1, "Attribute value is required")
+  })).min(1, "At least one attribute is required"),
+  stockQuantity: z.number().min(0, "Stock quantity cannot be negative").default(0),
+  additionalPrice: z.number().optional().transform((val) => val !== undefined ? val.toString() : "0.00"),
+  images: z.array(z.string()).default([])
 });
 
 export const insertProductRatingSchema = createInsertSchema(productRatings).omit({

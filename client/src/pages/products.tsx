@@ -41,6 +41,37 @@ import { cn } from "@/lib/utils";
 
 const inputStyles = "h-10 border border-gray-300 bg-background focus-visible:ring-1 focus-visible:ring-gray-400 focus-visible:border-gray-400";
 
+// Available product tags
+const availableTags = [
+  { value: "new", label: "New" },
+  { value: "popular", label: "Popular" },
+  { value: "bestseller", label: "Bestseller" },
+  { value: "limited", label: "Limited Edition" },
+  { value: "discounted", label: "Discounted" },
+  { value: "premium", label: "Premium" },
+  { value: "eco-friendly", label: "Eco-Friendly" },
+  { value: "featured", label: "Featured" }
+];
+
+// Calculate profit margin
+const calculateProfitMargin = (costPrice: string, sellingPrice: string): number => {
+  const cost = parseFloat(costPrice) || 0;
+  const selling = parseFloat(sellingPrice) || 0;
+  if (cost === 0) return 0;
+  return Math.round(((selling - cost) / cost) * 100);
+};
+
+// Generate SKU
+const generateSKU = (brand?: string, categoryIds?: string[], categories?: Category[]): string => {
+  const year = new Date().getFullYear();
+  const brandCode = brand ? brand.substring(0, 4).toUpperCase() : "PROD";
+  const categoryCode = categoryIds && categoryIds.length > 0 && categories ? 
+    categories.find(c => c.id === categoryIds[0])?.name.substring(0, 4).toUpperCase() || "ITEM" : 
+    "ITEM";
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `${brandCode}-${categoryCode}-${year}-${random}`;
+};
+
 const addProductSchema = z.object({
   sku: z.string()
     .min(1, "SKU is required")
@@ -49,19 +80,40 @@ const addProductSchema = z.object({
   name: z.string()
     .min(1, "Product name is required")
     .max(255, "Product name must be less than 255 characters"),
-  description: z.string().optional(),
-  detailedSpecifications: z.string().optional(),
+  description: z.string().min(1, "Description is required"),
+  detailedSpecifications: z.string().min(1, "Detailed specifications are required"),
   categoryIds: z.array(z.string().uuid()).min(1, "Please select at least one category"),
-  brand: z.string().optional(),
+  brand: z.string().min(1, "Brand is required"),
   images: z.array(z.string()).max(4, "Maximum 4 images allowed").default([]),
   sellingPrice: z.string()
     .min(1, "Selling price is required")
     .regex(/^\d+(\.\d{1,2})?$/, "Please enter a valid price"),
   costPrice: z.string()
-    .optional()
-    .refine((val) => !val || /^\d+(\.\d{1,2})?$/.test(val), "Please enter a valid cost price"),
+    .min(1, "Cost price is required")
+    .regex(/^\d+(\.\d{1,2})?$/, "Please enter a valid cost price"),
   supplierId: z.string().uuid().optional(),
   isActive: z.boolean().default(true),
+  // New fields
+  tags: z.array(z.string()).default([]),
+  discountPercentage: z.number().min(0).max(100).optional(),
+  stockQuantity: z.number().min(0, "Stock quantity cannot be negative").default(0),
+  lowStockThreshold: z.number().min(0, "Threshold cannot be negative").default(10),
+  weight: z.number().positive().optional(),
+  dimensions: z.object({
+    length: z.number().positive(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+    unit: z.enum(["cm", "in"])
+  }).optional(),
+}).refine((data) => {
+  // If "discounted" tag is selected, discount percentage is required
+  if (data.tags.includes("discounted")) {
+    return data.discountPercentage !== undefined;
+  }
+  return true;
+}, {
+  message: "Discount percentage is required when product is tagged as discounted",
+  path: ["discountPercentage"]
 });
 
 type FormData = z.infer<typeof addProductSchema>;
@@ -92,6 +144,12 @@ export default function Products() {
       costPrice: "",
       supplierId: "",
       isActive: true,
+      tags: [],
+      discountPercentage: undefined,
+      stockQuantity: 0,
+      lowStockThreshold: 10,
+      weight: undefined,
+      dimensions: undefined,
     },
   });
 
@@ -156,10 +214,16 @@ export default function Products() {
       categoryIds: product.categoryIds || [],
       brand: product.brand || "",
       images: product.images || [],
-      sellingPrice: product.sellingPrice,
-      costPrice: product.costPrice || "",
+      sellingPrice: product.sellingPrice.toString(),
+      costPrice: product.costPrice ? product.costPrice.toString() : "",
       supplierId: product.supplierId || "",
       isActive: product.isActive,
+      tags: product.tags || [],
+      discountPercentage: product.discountPercentage || undefined,
+      stockQuantity: product.stockQuantity || 0,
+      lowStockThreshold: product.lowStockThreshold || 10,
+      weight: product.weight ? parseFloat(product.weight.toString()) : undefined,
+      dimensions: product.dimensions as { length: number; width: number; height: number; unit: "cm" | "in" } | undefined,
     });
     setIsEditing(true);
     setIsAddDialogOpen(true);
@@ -223,7 +287,13 @@ export default function Products() {
       const productData = {
         ...data,
         images: finalImageUrls,
-        supplierId: data.supplierId === "none" ? null : data.supplierId
+        supplierId: data.supplierId === "none" ? null : data.supplierId,
+        // Convert string prices to numbers for database
+        sellingPrice: parseFloat(data.sellingPrice),
+        costPrice: parseFloat(data.costPrice),
+        // Handle optional physical properties
+        weight: data.weight || undefined,
+        dimensions: data.dimensions || undefined,
       };
 
       const url = isEditing && selectedProduct ? `/api/products/${selectedProduct.id}` : '/api/products';
@@ -318,7 +388,7 @@ export default function Products() {
       product.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (product.brand && product.brand.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    const matchesCategory = !categoryFilter || categoryFilter === "all" || product.categoryId === categoryFilter;
+    const matchesCategory = !categoryFilter || categoryFilter === "all" || product.categoryIds.includes(categoryFilter);
     
     return matchesSearch && matchesCategory;
   });
@@ -349,7 +419,7 @@ export default function Products() {
               Add Product
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-[600px] w-[95vw] max-h-[95vh] overflow-y-auto">
+          <DialogContent className="max-w-[800px] w-[95vw] max-h-[95vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Package className="h-5 w-5" />
@@ -370,12 +440,30 @@ export default function Products() {
                       <FormItem>
                         <FormLabel>SKU *</FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder="e.g., DRL-001-BLK" 
-                            {...field}
-                            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-                            className={cn(inputStyles, "uppercase")}
-                          />
+                          <div className="flex gap-2">
+                            <Input 
+                              placeholder="e.g., DRL-001-BLK" 
+                              {...field}
+                              onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                              className={cn(inputStyles, "uppercase")}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const newSKU = generateSKU(
+                                  form.watch("brand"),
+                                  form.watch("categoryIds"),
+                                  categories
+                                );
+                                form.setValue("sku", newSKU);
+                              }}
+                              className="px-3"
+                            >
+                              🎲
+                            </Button>
+                          </div>
                         </FormControl>
                         <FormDescription>
                           Unique identifier for this product
@@ -592,6 +680,281 @@ export default function Products() {
                   />
                 </div>
 
+                {/* Profit Margin Display */}
+                {form.watch("costPrice") && form.watch("sellingPrice") && (
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <div className="text-sm text-muted-foreground">
+                      Profit Margin: <span className="font-semibold text-green-600">
+                        {calculateProfitMargin(form.watch("costPrice") || "0", form.watch("sellingPrice") || "0")}%
+                      </span>
+                      {form.watch("discountPercentage") && (
+                        <span className="ml-2">| Discount: {form.watch("discountPercentage")}%</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tags Section */}
+                <FormField
+                  control={form.control}
+                  name="tags"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Product Tags</FormLabel>
+                      <FormControl>
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-4 gap-2">
+                            {availableTags.map((tag) => (
+                              <div key={tag.value} className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  id={`tag-${tag.value}`}
+                                  checked={field.value?.includes(tag.value) || false}
+                                  onChange={(e) => {
+                                    const currentValues = field.value || [];
+                                    if (e.target.checked) {
+                                      field.onChange([...currentValues, tag.value]);
+                                    } else {
+                                      field.onChange(currentValues.filter(t => t !== tag.value));
+                                      // Clear discount percentage if "discounted" tag is unchecked
+                                      if (tag.value === "discounted") {
+                                        form.setValue("discountPercentage", undefined);
+                                      }
+                                    }
+                                  }}
+                                  className="rounded"
+                                />
+                                <label
+                                  htmlFor={`tag-${tag.value}`}
+                                  className="text-sm cursor-pointer flex-1"
+                                >
+                                  {tag.label}
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Dynamic Discount Percentage Field */}
+                {form.watch("tags")?.includes("discounted") && (
+                  <FormField
+                    control={form.control}
+                    name="discountPercentage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Discount Percentage *</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input 
+                              type="number"
+                              min="0"
+                              max="100"
+                              placeholder="Enter discount percentage"
+                              className={cn(inputStyles, "pr-8")}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                            />
+                            <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">%</span>
+                          </div>
+                        </FormControl>
+                        <FormDescription>
+                          Discount applied to the selling price
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {/* Inventory Management Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    <h3 className="text-lg font-semibold">Inventory Management</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="stockQuantity"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Stock Quantity *</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input 
+                                type="number"
+                                min="0"
+                                placeholder="0"
+                                className={cn(inputStyles, "pr-16")}
+                                value={field.value}
+                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                              />
+                              <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground text-sm">units</span>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="lowStockThreshold"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Low Stock Alert *</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input 
+                                type="number"
+                                min="0"
+                                placeholder="10"
+                                className={cn(inputStyles, "pr-16")}
+                                value={field.value}
+                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                              />
+                              <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground text-sm">units</span>
+                            </div>
+                          </FormControl>
+                          <FormDescription>
+                            Alert when stock falls below this level
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Physical Properties Section (Optional) */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 text-muted-foreground">📏</div>
+                      <h3 className="text-lg font-semibold">Physical Properties</h3>
+                      <Badge variant="secondary" className="text-xs">Optional</Badge>
+                    </div>
+                  </div>
+                  
+                  {/* Weight */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="weight"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Weight</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number"
+                              min="0"
+                              step="0.001"
+                              placeholder="0.000"
+                              className={cn(inputStyles)}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="flex items-end">
+                      <div className="text-sm text-muted-foreground mt-8 ml-2">
+                        kg (kilograms)
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dimensions */}
+                  <div className="space-y-2">
+                    <FormLabel>Dimensions</FormLabel>
+                    <div className="grid grid-cols-4 gap-2">
+                      <FormField
+                        control={form.control}
+                        name="dimensions.length"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input 
+                                type="number"
+                                min="0"
+                                placeholder="Length"
+                                className={cn(inputStyles)}
+                                value={field.value || ""}
+                                onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="dimensions.width"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input 
+                                type="number"
+                                min="0"
+                                placeholder="Width"
+                                className={cn(inputStyles)}
+                                value={field.value || ""}
+                                onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="dimensions.height"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input 
+                                type="number"
+                                min="0"
+                                placeholder="Height"
+                                className={cn(inputStyles)}
+                                value={field.value || ""}
+                                onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="dimensions.unit"
+                        render={({ field }) => (
+                          <FormItem>
+                            <Select onValueChange={field.onChange} defaultValue="cm">
+                              <FormControl>
+                                <SelectTrigger className={cn(inputStyles)}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="cm">cm</SelectItem>
+                                <SelectItem value="in">inches</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <FormField
                   control={form.control}
                   name="isActive"
@@ -745,9 +1108,11 @@ export default function Products() {
                   {/* Product Details */}
                   <div className="p-4 rounded-lg">
                     <div className="flex items-start justify-between mb-3">
-                      <Badge variant="secondary" className={getCategoryColor(product.categoryId)}>
-                        {getCategoryDisplay(product.categoryId)}
-                      </Badge>
+                      {product.categoryIds.map((categoryId) => (
+                        <Badge key={categoryId} variant="secondary" className={getCategoryColor(categoryId)}>
+                          {getCategoryDisplay(categoryId)}
+                        </Badge>
+                      ))}
                       {!product.isActive && (
                         <Badge variant="outline">Inactive</Badge>
                       )}
@@ -831,9 +1196,13 @@ export default function Products() {
                 <div className="space-y-3">
                   {/* Status and Category */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="secondary" className={`${getCategoryColor(selectedProduct.categoryId)} text-xs`}>
-                      {getCategoryDisplay(selectedProduct.categoryId)}
-                    </Badge>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedProduct.categoryIds.map((categoryId) => (
+                        <Badge key={categoryId} variant="secondary" className={`${getCategoryColor(categoryId)} text-xs`}>
+                          {getCategoryDisplay(categoryId)}
+                        </Badge>
+                      ))}
+                    </div>
                     {!selectedProduct.isActive && (
                       <Badge variant="outline" className="text-xs">Inactive</Badge>
                     )}
