@@ -1,24 +1,30 @@
-CREATE TYPE "public"."category" AS ENUM('power_tools', 'hand_tools', 'safety_equipment', 'accessories', 'replacement_parts');--> statement-breakpoint
-CREATE TYPE "public"."customer_type" AS ENUM('individual', 'professional_contractor', 'industrial_account', 'government_municipal', 'educational_institution');--> statement-breakpoint
 CREATE TYPE "public"."order_status" AS ENUM('pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned');--> statement-breakpoint
 CREATE TYPE "public"."order_type" AS ENUM('retail', 'bulk', 'emergency', 'warranty', 'recurring');--> statement-breakpoint
 CREATE TYPE "public"."user_role" AS ENUM('super_admin', 'operations_manager', 'product_manager', 'customer_service', 'sales_representative', 'warehouse_manager', 'technical_support');--> statement-breakpoint
 CREATE TYPE "public"."warranty_status" AS ENUM('active', 'expired', 'claimed', 'voided');--> statement-breakpoint
+CREATE TABLE "categories" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" varchar(100) NOT NULL,
+	"description" text,
+	"slug" varchar(100) NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"sort_order" integer DEFAULT 0,
+	"created_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	"updated_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT "categories_slug_unique" UNIQUE("slug")
+);
+--> statement-breakpoint
 CREATE TABLE "customers" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"company_name" varchar(255),
-	"contact_first_name" varchar(255) NOT NULL,
-	"contact_last_name" varchar(255) NOT NULL,
 	"email" varchar(255) NOT NULL,
-	"phone" varchar(50),
-	"customer_type" "customer_type" NOT NULL,
-	"tax_exempt" boolean DEFAULT false,
-	"credit_limit" numeric(10, 2),
-	"payment_terms" integer,
+	"password_hash" text NOT NULL,
+	"first_name" varchar(100),
+	"last_name" varchar(100),
+	"phone" varchar(20),
 	"is_active" boolean DEFAULT true NOT NULL,
-	"address" jsonb,
-	"created_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	"updated_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "customers_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
 CREATE TABLE "inventory" (
@@ -64,25 +70,70 @@ CREATE TABLE "orders" (
 	CONSTRAINT "orders_order_number_unique" UNIQUE("order_number")
 );
 --> statement-breakpoint
+CREATE TABLE "product_ratings" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"product_id" uuid NOT NULL,
+	"customer_id" uuid NOT NULL,
+	"rating" integer NOT NULL,
+	"created_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "product_reviews" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"product_id" uuid NOT NULL,
+	"customer_id" uuid NOT NULL,
+	"rating" integer NOT NULL,
+	"review_text" text NOT NULL,
+	"created_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	"updated_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "product_variants" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"product_id" uuid NOT NULL,
+	"sku" varchar(100) NOT NULL,
+	"attributes" jsonb NOT NULL,
+	"stock_quantity" integer DEFAULT 0 NOT NULL,
+	"additional_price" numeric(10, 2) DEFAULT '0.00',
+	"images" jsonb DEFAULT '[]'::jsonb,
+	"created_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	"updated_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT "product_variants_sku_unique" UNIQUE("sku")
+);
+--> statement-breakpoint
 CREATE TABLE "products" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"sku" varchar(100) NOT NULL,
 	"name" varchar(255) NOT NULL,
-	"description" text,
-	"category" "category" NOT NULL,
-	"brand" varchar(100),
-	"price" numeric(10, 2) NOT NULL,
-	"cost_price" numeric(10, 2),
-	"weight" numeric(8, 2),
+	"description" text NOT NULL,
+	"detailed_specifications" text NOT NULL,
+	"category_ids" jsonb NOT NULL,
+	"brand" varchar(100) NOT NULL,
+	"cost_price" numeric(10, 2) NOT NULL,
+	"selling_price" numeric(10, 2) NOT NULL,
+	"original_price" numeric(10, 2),
+	"discount_percentage" integer,
+	"weight" numeric(8, 3),
 	"dimensions" jsonb,
-	"technical_specs" jsonb,
-	"safety_compliance" jsonb,
-	"warranty_months" integer DEFAULT 12,
+	"images" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"stock_quantity" integer DEFAULT 0 NOT NULL,
+	"low_stock_threshold" integer DEFAULT 10 NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
-	"is_seasonal" boolean DEFAULT false,
+	"supplier_id" uuid,
+	"tags" jsonb DEFAULT '[]'::jsonb,
 	"created_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	"updated_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	CONSTRAINT "products_sku_unique" UNIQUE("sku")
+);
+--> statement-breakpoint
+CREATE TABLE "suppliers" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" varchar(255) NOT NULL,
+	"contact_email" varchar(255),
+	"contact_phone" varchar(50),
+	"address" text,
+	"created_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	"updated_at" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
@@ -134,6 +185,12 @@ ALTER TABLE "inventory" ADD CONSTRAINT "inventory_product_id_products_id_fk" FOR
 ALTER TABLE "order_items" ADD CONSTRAINT "order_items_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "order_items" ADD CONSTRAINT "order_items_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "product_ratings" ADD CONSTRAINT "product_ratings_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "product_ratings" ADD CONSTRAINT "product_ratings_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "product_reviews" ADD CONSTRAINT "product_reviews_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "product_reviews" ADD CONSTRAINT "product_reviews_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "product_variants" ADD CONSTRAINT "product_variants_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_supplier_id_suppliers_id_fk" FOREIGN KEY ("supplier_id") REFERENCES "public"."suppliers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "warranties" ADD CONSTRAINT "warranties_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "warranties" ADD CONSTRAINT "warranties_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "warranties" ADD CONSTRAINT "warranties_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE no action ON UPDATE no action;

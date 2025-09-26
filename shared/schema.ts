@@ -14,13 +14,7 @@ export const userRoleEnum = pgEnum("user_role", [
   "technical_support"
 ]);
 
-export const customerTypeEnum = pgEnum("customer_type", [
-  "individual",
-  "professional_contractor",
-  "industrial_account",
-  "government_municipal",
-  "educational_institution"
-]);
+
 
 export const orderTypeEnum = pgEnum("order_type", [
   "retail",
@@ -61,22 +55,17 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
-// Customers table
+// Customer table - simplified for e-commerce store
 export const customers = pgTable("customers", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyName: varchar("company_name", { length: 255 }),
-  contactFirstName: varchar("contact_first_name", { length: 255 }).notNull(),
-  contactLastName: varchar("contact_last_name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull(),
-  phone: varchar("phone", { length: 50 }),
-  customerType: customerTypeEnum("customer_type").notNull(),
-  taxExempt: boolean("tax_exempt").default(false),
-  creditLimit: decimal("credit_limit", { precision: 10, scale: 2 }),
-  paymentTerms: integer("payment_terms"), // Net payment terms in days
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  firstName: varchar("first_name", { length: 100 }),
+  lastName: varchar("last_name", { length: 100 }),
+  phone: varchar("phone", { length: 20 }),
   isActive: boolean("is_active").notNull().default(true),
-  address: jsonb("address"), // Store address object
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Categories table
@@ -91,19 +80,80 @@ export const categories = pgTable("categories", {
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
-// Products table
+// Suppliers table - Direct product manufacturers/suppliers for inventory management
+// Used for tracking where products come from and restocking purposes
+export const suppliers = pgTable("suppliers", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 255 }).notNull(),
+  contactEmail: varchar("contact_email", { length: 255 }),
+  contactPhone: varchar("contact_phone", { length: 50 }),
+  address: text("address"),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Products table (updated structure)
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   sku: varchar("sku", { length: 100 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
-  description: text("description"),
-  detailedSpecifications: text("detailed_specifications"),
-  categoryId: uuid("category_id").notNull().references(() => categories.id),
-  brand: varchar("brand", { length: 100 }),
-  images: jsonb("images").$type<string[]>().default(sql`'[]'::jsonb`), // Array of image URLs
+  description: text("description").notNull(),
+  detailedSpecifications: text("detailed_specifications").notNull(),
+  categoryIds: jsonb("category_ids").$type<string[]>().notNull(), // Array of category UUIDs
+  brand: varchar("brand", { length: 100 }).notNull(),
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }).notNull(),
   sellingPrice: decimal("selling_price", { precision: 10, scale: 2 }).notNull(),
-  costPrice: decimal("cost_price", { precision: 10, scale: 2 }),
+  originalPrice: decimal("original_price", { precision: 10, scale: 2 }), // For discounted items
+  discountPercentage: integer("discount_percentage"), // 0-100
+  weight: decimal("weight", { precision: 8, scale: 3 }), // kg or lbs
+  dimensions: jsonb("dimensions").$type<{
+    length: number;
+    width: number;
+    height: number;
+    unit: string;
+  }>(),
+  images: jsonb("images").$type<string[]>().notNull().default(sql`'[]'::jsonb`), // Exactly 4 images
+  stockQuantity: integer("stock_quantity").notNull().default(0),
+  lowStockThreshold: integer("low_stock_threshold").notNull().default(10),
   isActive: boolean("is_active").notNull().default(true),
+  supplierId: uuid("supplier_id").references(() => suppliers.id),
+  tags: jsonb("tags").$type<string[]>().default(sql`'[]'::jsonb`), // new, popular, etc.
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Product Variants table
+export const productVariants = pgTable("product_variants", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  sku: varchar("sku", { length: 100 }).notNull().unique(),
+  attributes: jsonb("attributes").$type<Array<{
+    type: string;
+    value: string;
+  }>>().notNull(), // [{type: "color", value: "red"}, {type: "size", value: "large"}]
+  stockQuantity: integer("stock_quantity").notNull().default(0),
+  additionalPrice: decimal("additional_price", { precision: 10, scale: 2 }).default("0.00"), // Price difference from base product
+  images: jsonb("images").$type<string[]>().default(sql`'[]'::jsonb`), // Variant-specific images
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Product Ratings table
+export const productRatings = pgTable("product_ratings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(), // 1-5 scale
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Product Reviews table
+export const productReviews = pgTable("product_reviews", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(), // 1-5 scale
+  reviewText: text("review_text").notNull(),
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
@@ -171,7 +221,8 @@ export const warranties = pgTable("warranties", {
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
-// Vendors table
+// Vendors table - Business partners and resellers for sales/distribution
+// Used for managing authorized dealers, payment terms, and partnership agreements
 export const vendors = pgTable("vendors", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name", { length: 255 }).notNull(),
@@ -204,6 +255,12 @@ export const insertCategorySchema = createInsertSchema(categories).omit({
   updatedAt: true
 });
 
+export const insertSupplierSchema = createInsertSchema(suppliers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
 export const insertProductSchema = z.object({
   sku: z.string()
     .min(1, "SKU is required")
@@ -211,14 +268,44 @@ export const insertProductSchema = z.object({
   name: z.string()
     .min(1, "Product name is required")
     .max(255, "Product name must be less than 255 characters"),
-  description: z.string().optional(),
-  detailedSpecifications: z.string().optional(),
-  categoryId: z.string().uuid("Please select a valid category"),
-  brand: z.string().optional(),
-  images: z.array(z.string()).max(4, "Maximum 4 images allowed").default([]),
+  description: z.string().min(1, "Description is required"),
+  detailedSpecifications: z.string().min(1, "Detailed specifications are required"),
+  categoryIds: z.array(z.string().uuid()).min(1, "At least one category is required"),
+  brand: z.string().min(1, "Brand is required"),
+  costPrice: z.string().min(1, "Cost price is required"),
   sellingPrice: z.string().min(1, "Selling price is required"),
-  costPrice: z.string().optional(),
+  originalPrice: z.string().optional(),
+  discountPercentage: z.number().min(0).max(100).optional(),
+  weight: z.string().optional(),
+  dimensions: z.object({
+    length: z.number().positive(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+    unit: z.string()
+  }).optional(),
+  images: z.array(z.string()).length(4, "Exactly 4 images are required"),
+  stockQuantity: z.number().min(0, "Stock quantity cannot be negative"),
+  lowStockThreshold: z.number().min(0, "Low stock threshold cannot be negative"),
   isActive: z.boolean().default(true),
+  supplierId: z.string().uuid().optional(),
+  tags: z.array(z.string()).default([])
+});
+
+export const insertProductVariantSchema = createInsertSchema(productVariants).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertProductRatingSchema = createInsertSchema(productRatings).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertProductReviewSchema = createInsertSchema(productReviews).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
 });
 
 export const insertInventorySchema = createInsertSchema(inventory).omit({
@@ -262,8 +349,16 @@ export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Customer = typeof customers.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Category = typeof categories.$inferSelect;
+export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
+export type Supplier = typeof suppliers.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
+export type InsertProductVariant = z.infer<typeof insertProductVariantSchema>;
+export type ProductVariant = typeof productVariants.$inferSelect;
+export type InsertProductRating = z.infer<typeof insertProductRatingSchema>;
+export type ProductRating = typeof productRatings.$inferSelect;
+export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
+export type ProductReview = typeof productReviews.$inferSelect;
 export type InsertInventory = z.infer<typeof insertInventorySchema>;
 export type Inventory = typeof inventory.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;

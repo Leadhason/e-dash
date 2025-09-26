@@ -7,6 +7,14 @@ import {
   type InsertCategory,
   type Product, 
   type InsertProduct,
+  type Supplier,
+  type InsertSupplier,
+  type ProductVariant,
+  type InsertProductVariant,
+  type ProductRating,
+  type InsertProductRating,
+  type ProductReview,
+  type InsertProductReview,
   type Inventory, 
   type InsertInventory,
   type Order, 
@@ -22,6 +30,10 @@ import {
   customers,
   categories,
   products,
+  suppliers,
+  productVariants,
+  productRatings,
+  productReviews,
   inventory,
   orders,
   orderItems,
@@ -62,6 +74,13 @@ export interface IStorage {
   getCategoriesMinimal(): Promise<{ id: string; name: string; slug: string }[]>;
   checkSlugExists(slug: string): Promise<boolean>;
 
+  // Supplier methods
+  getSupplier(id: string): Promise<Supplier | undefined>;
+  createSupplier(supplier: InsertSupplier): Promise<Supplier>;
+  updateSupplier(id: string, supplier: Partial<InsertSupplier>): Promise<Supplier | undefined>;
+  deleteSupplier(id: string): Promise<boolean>;
+  getAllSuppliers(): Promise<Supplier[]>;
+
   // Product methods
   getProduct(id: string): Promise<Product | undefined>;
   getProductBySku(sku: string): Promise<Product | undefined>;
@@ -72,6 +91,28 @@ export interface IStorage {
   getAllProducts(): Promise<Product[]>;
   getProductsByCategory(category: string): Promise<Product[]>;
   searchProducts(query: string): Promise<Product[]>;
+
+  // Product Variant methods
+  getProductVariant(id: string): Promise<ProductVariant | undefined>;
+  getProductVariantsBySku(sku: string): Promise<ProductVariant | undefined>;
+  createProductVariant(variant: InsertProductVariant): Promise<ProductVariant>;
+  updateProductVariant(id: string, variant: Partial<InsertProductVariant>): Promise<ProductVariant | undefined>;
+  deleteProductVariant(id: string): Promise<boolean>;
+  getProductVariantsByProduct(productId: string): Promise<ProductVariant[]>;
+
+  // Product Rating methods
+  getProductRating(id: string): Promise<ProductRating | undefined>;
+  createProductRating(rating: InsertProductRating): Promise<ProductRating>;
+  getProductRatingsByProduct(productId: string): Promise<ProductRating[]>;
+  getProductRatingsByCustomer(customerId: string): Promise<ProductRating[]>;
+
+  // Product Review methods
+  getProductReview(id: string): Promise<ProductReview | undefined>;
+  createProductReview(review: InsertProductReview): Promise<ProductReview>;
+  updateProductReview(id: string, review: Partial<InsertProductReview>): Promise<ProductReview | undefined>;
+  deleteProductReview(id: string): Promise<boolean>;
+  getProductReviewsByProduct(productId: string): Promise<ProductReview[]>;
+  getProductReviewsByCustomer(customerId: string): Promise<ProductReview[]>;
 
   // Inventory methods
   getInventory(productId: string, location?: string): Promise<Inventory[]>;

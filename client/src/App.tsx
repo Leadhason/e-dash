@@ -17,6 +17,7 @@ import Orders from "@/pages/orders";
 import Customers from "@/pages/customers";
 import Warranties from "@/pages/warranties";
 import Vendors from "@/pages/vendors";
+import Suppliers from "@/pages/suppliers";
 import Support from "@/pages/support";
 import Settings from "@/pages/settings";
 
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} />} />
       <Route path="/warranties" component={() => <ProtectedRoute component={Warranties} />} />
       <Route path="/vendors" component={() => <ProtectedRoute component={Vendors} />} />
+      <Route path="/suppliers" component={() => <ProtectedRoute component={Suppliers} />} />
       <Route path="/support" component={() => <ProtectedRoute component={Support} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       {/* Fallback to 404 */}

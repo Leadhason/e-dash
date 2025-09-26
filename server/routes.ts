@@ -6,6 +6,10 @@ import {
   insertCustomerSchema,
   insertCategorySchema,
   insertProductSchema,
+  insertSupplierSchema,
+  insertProductVariantSchema,
+  insertProductRatingSchema,
+  insertProductReviewSchema,
   insertInventorySchema,
   insertOrderSchema,
   insertOrderItemSchema,
@@ -500,6 +504,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(warranty);
     } catch (error) {
       res.status(500).json({ message: "Failed to update warranty" });
+    }
+  });
+
+  // Supplier routes
+  app.get("/api/suppliers", authenticateToken, async (req, res) => {
+    try {
+      const suppliers = await storage.getAllSuppliers();
+      res.json(suppliers);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch suppliers" });
+    }
+  });
+
+  app.post("/api/suppliers", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      const supplierData = insertSupplierSchema.parse(req.body);
+      const supplier = await storage.createSupplier(supplierData);
+      res.status(201).json(supplier);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid supplier data" });
+    }
+  });
+
+  app.get("/api/suppliers/:id", authenticateToken, async (req, res) => {
+    try {
+      const supplier = await storage.getSupplier(req.params.id);
+      if (!supplier) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      res.json(supplier);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch supplier" });
+    }
+  });
+
+  app.put("/api/suppliers/:id", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      const supplierData = insertSupplierSchema.parse(req.body);
+      const supplier = await storage.updateSupplier(req.params.id, supplierData);
+      if (!supplier) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      res.json(supplier);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid supplier data" });
+    }
+  });
+
+  app.delete("/api/suppliers/:id", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      const deleted = await storage.deleteSupplier(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      res.json({ message: "Supplier deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete supplier" });
+    }
+  });
+
+  // Product Variant routes
+  app.get("/api/products/:productId/variants", authenticateToken, async (req, res) => {
+    try {
+      const variants = await storage.getProductVariantsByProduct(req.params.productId);
+      res.json(variants);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch product variants" });
+    }
+  });
+
+  app.post("/api/products/:productId/variants", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      const variantData = insertProductVariantSchema.parse({
+        ...req.body,
+        productId: req.params.productId
+      });
+      const variant = await storage.createProductVariant(variantData);
+      res.status(201).json(variant);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid variant data" });
+    }
+  });
+
+  app.put("/api/product-variants/:id", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      const variantData = insertProductVariantSchema.parse(req.body);
+      const variant = await storage.updateProductVariant(req.params.id, variantData);
+      if (!variant) {
+        return res.status(404).json({ message: "Product variant not found" });
+      }
+      res.json(variant);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid variant data" });
+    }
+  });
+
+  app.delete("/api/product-variants/:id", authenticateToken, requireRole(['super_admin', 'product_manager']), async (req, res) => {
+    try {
+      const deleted = await storage.deleteProductVariant(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Product variant not found" });
+      }
+      res.json({ message: "Product variant deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete product variant" });
+    }
+  });
+
+  // Product Rating routes
+  app.get("/api/products/:productId/ratings", authenticateToken, async (req, res) => {
+    try {
+      const ratings = await storage.getProductRatingsByProduct(req.params.productId);
+      res.json(ratings);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch product ratings" });
+    }
+  });
+
+  app.post("/api/products/:productId/ratings", authenticateToken, async (req, res) => {
+    try {
+      const ratingData = insertProductRatingSchema.parse({
+        ...req.body,
+        productId: req.params.productId
+      });
+      
+      // Typically you'd get customerId from the authenticated user
+      if (!ratingData.customerId) {
+        return res.status(400).json({ message: "Customer ID is required" });
+      }
+      
+      const rating = await storage.createProductRating(ratingData);
+      res.status(201).json(rating);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid rating data" });
+    }
+  });
+
+  // Product Review routes
+  app.get("/api/products/:productId/reviews", authenticateToken, async (req, res) => {
+    try {
+      const reviews = await storage.getProductReviewsByProduct(req.params.productId);
+      res.json(reviews);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch product reviews" });
+    }
+  });
+
+  app.post("/api/products/:productId/reviews", authenticateToken, async (req, res) => {
+    try {
+      const reviewData = insertProductReviewSchema.parse({
+        ...req.body,
+        productId: req.params.productId
+      });
+      
+      // Typically you'd get customerId from the authenticated user
+      if (!reviewData.customerId) {
+        return res.status(400).json({ message: "Customer ID is required" });
+      }
+      
+      const review = await storage.createProductReview(reviewData);
+      res.status(201).json(review);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid review data" });
+    }
+  });
+
+  app.put("/api/product-reviews/:id", authenticateToken, async (req, res) => {
+    try {
+      const reviewData = insertProductReviewSchema.parse(req.body);
+      const review = await storage.updateProductReview(req.params.id, reviewData);
+      if (!review) {
+        return res.status(404).json({ message: "Product review not found" });
+      }
+      res.json(review);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid review data" });
+    }
+  });
+
+  app.delete("/api/product-reviews/:id", authenticateToken, async (req, res) => {
+    try {
+      const deleted = await storage.deleteProductReview(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Product review not found" });
+      }
+      res.json({ message: "Product review deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete product review" });
     }
   });
 

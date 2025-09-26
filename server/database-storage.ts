@@ -8,6 +8,14 @@ import {
   type InsertCategory,
   type Product, 
   type InsertProduct,
+  type Supplier,
+  type InsertSupplier,
+  type ProductVariant,
+  type InsertProductVariant,
+  type ProductRating,
+  type InsertProductRating,
+  type ProductReview,
+  type InsertProductReview,
   type Inventory, 
   type InsertInventory,
   type Order, 
@@ -22,6 +30,10 @@ import {
   customers,
   categories,
   products,
+  suppliers,
+  productVariants,
+  productRatings,
+  productReviews,
   inventory,
   orders,
   orderItems,
@@ -190,8 +202,26 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCategory(id: string): Promise<boolean> {
     try {
-      // First, delete all products in this category
-      await db.delete(products).where(eq(products.categoryId, id));
+      // First, we need to remove this category from all products' categoryIds arrays
+      // or delete products if this is their only category
+      const productsWithCategory = await db
+        .select()
+        .from(products)
+        .where(sql`${products.categoryIds} ? ${id}`);
+      
+      for (const product of productsWithCategory) {
+        const categoryIds = (product.categoryIds as string[]).filter(catId => catId !== id);
+        if (categoryIds.length === 0) {
+          // Delete product if no categories left
+          await db.delete(products).where(eq(products.id, product.id));
+        } else {
+          // Update product to remove this category
+          await db
+            .update(products)
+            .set({ categoryIds: categoryIds as any, updatedAt: new Date() })
+            .where(eq(products.id, product.id));
+        }
+      }
       
       // Then delete the category
       const result = await db.delete(categories).where(eq(categories.id, id)).returning();
@@ -238,24 +268,29 @@ export class DatabaseStorage implements IStorage {
       
       const categoriesData = await baseQuery;
       
-      // Efficient batch query for product counts
-      const productCounts = await db
-        .select({
-          categoryId: products.categoryId,
-          count: sql<number>`count(*)::int`
+      // For each category, count products that include this category in their categoryIds array
+      const categoriesWithCounts = await Promise.all(
+        categoriesData.map(async (cat) => {
+          const countResult = await db
+            .select({
+              count: sql<number>`count(*)::int`
+            })
+            .from(products)
+            .where(
+              and(
+                eq(products.isActive, true),
+                sql`${products.categoryIds}::jsonb ? ${cat.id}::text` // JSONB contains operator with proper casting
+              )
+            );
+          
+          return {
+            ...cat,
+            productCount: countResult[0]?.count || 0
+          };
         })
-        .from(products)
-        .where(eq(products.isActive, true))
-        .groupBy(products.categoryId);
-      
-      const countMap = new Map(
-        productCounts.map(pc => [pc.categoryId, pc.count])
       );
       
-      return categoriesData.map(cat => ({
-        ...cat,
-        productCount: countMap.get(cat.id) || 0
-      }));
+      return categoriesWithCounts;
     } catch (error) {
       console.error('Error fetching categories with product count:', error);
       throw error;
@@ -325,7 +360,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductsByCategory(category: string): Promise<Product[]> {
-    return await db.select().from(products).where(eq(products.categoryId, category));
+    return await db
+      .select()
+      .from(products)
+      .where(sql`${products.categoryIds} ? ${category}`);
   }
 
   async searchProducts(query: string): Promise<Product[]> {
@@ -469,6 +507,128 @@ export class DatabaseStorage implements IStorage {
 
   async getActiveVendors(): Promise<Vendor[]> {
     return await db.select().from(vendors).where(eq(vendors.isActive, true));
+  }
+
+  // Supplier methods
+  async getSupplier(id: string): Promise<Supplier | undefined> {
+    const [supplier] = await db.select().from(suppliers).where(eq(suppliers.id, id));
+    return supplier;
+  }
+
+  async createSupplier(supplierData: InsertSupplier): Promise<Supplier> {
+    const [supplier] = await db.insert(suppliers).values(supplierData).returning();
+    return supplier;
+  }
+
+  async updateSupplier(id: string, supplierData: Partial<InsertSupplier>): Promise<Supplier | undefined> {
+    const [supplier] = await db.update(suppliers)
+      .set({ ...supplierData, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(suppliers.id, id))
+      .returning();
+    return supplier;
+  }
+
+  async deleteSupplier(id: string): Promise<boolean> {
+    const result = await db.delete(suppliers).where(eq(suppliers.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getAllSuppliers(): Promise<Supplier[]> {
+    return await db.select().from(suppliers).orderBy(suppliers.name);
+  }
+
+  // Product Variant methods
+  async getProductVariant(id: string): Promise<ProductVariant | undefined> {
+    const [variant] = await db.select().from(productVariants).where(eq(productVariants.id, id));
+    return variant;
+  }
+
+  async getProductVariantsBySku(sku: string): Promise<ProductVariant | undefined> {
+    const [variant] = await db.select().from(productVariants).where(eq(productVariants.sku, sku));
+    return variant;
+  }
+
+  async createProductVariant(variantData: InsertProductVariant): Promise<ProductVariant> {
+    const [variant] = await db.insert(productVariants).values(variantData).returning();
+    return variant;
+  }
+
+  async updateProductVariant(id: string, variantData: Partial<InsertProductVariant>): Promise<ProductVariant | undefined> {
+    const [variant] = await db.update(productVariants)
+      .set({ ...variantData, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(productVariants.id, id))
+      .returning();
+    return variant;
+  }
+
+  async deleteProductVariant(id: string): Promise<boolean> {
+    const result = await db.delete(productVariants).where(eq(productVariants.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getProductVariantsByProduct(productId: string): Promise<ProductVariant[]> {
+    return await db.select().from(productVariants)
+      .where(eq(productVariants.productId, productId))
+      .orderBy(productVariants.createdAt);
+  }
+
+  // Product Rating methods
+  async getProductRating(id: string): Promise<ProductRating | undefined> {
+    const [rating] = await db.select().from(productRatings).where(eq(productRatings.id, id));
+    return rating;
+  }
+
+  async createProductRating(ratingData: InsertProductRating): Promise<ProductRating> {
+    const [rating] = await db.insert(productRatings).values(ratingData).returning();
+    return rating;
+  }
+
+  async getProductRatingsByProduct(productId: string): Promise<ProductRating[]> {
+    return await db.select().from(productRatings)
+      .where(eq(productRatings.productId, productId))
+      .orderBy(productRatings.createdAt);
+  }
+
+  async getProductRatingsByCustomer(customerId: string): Promise<ProductRating[]> {
+    return await db.select().from(productRatings)
+      .where(eq(productRatings.customerId, customerId))
+      .orderBy(productRatings.createdAt);
+  }
+
+  // Product Review methods
+  async getProductReview(id: string): Promise<ProductReview | undefined> {
+    const [review] = await db.select().from(productReviews).where(eq(productReviews.id, id));
+    return review;
+  }
+
+  async createProductReview(reviewData: InsertProductReview): Promise<ProductReview> {
+    const [review] = await db.insert(productReviews).values(reviewData).returning();
+    return review;
+  }
+
+  async updateProductReview(id: string, reviewData: Partial<InsertProductReview>): Promise<ProductReview | undefined> {
+    const [review] = await db.update(productReviews)
+      .set({ ...reviewData, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(productReviews.id, id))
+      .returning();
+    return review;
+  }
+
+  async deleteProductReview(id: string): Promise<boolean> {
+    const result = await db.delete(productReviews).where(eq(productReviews.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getProductReviewsByProduct(productId: string): Promise<ProductReview[]> {
+    return await db.select().from(productReviews)
+      .where(eq(productReviews.productId, productId))
+      .orderBy(productReviews.createdAt);
+  }
+
+  async getProductReviewsByCustomer(customerId: string): Promise<ProductReview[]> {
+    return await db.select().from(productReviews)
+      .where(eq(productReviews.customerId, customerId))
+      .orderBy(productReviews.createdAt);
   }
 
   // Dashboard metrics

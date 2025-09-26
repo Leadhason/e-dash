@@ -78,3 +78,93 @@ export interface SystemAlert {
   message: string;
   timestamp: Date;
 }
+
+export interface ProductWithDetails {
+  id: string;
+  sku: string;
+  name: string;
+  description: string;
+  detailedSpecifications: string;
+  categoryIds: string[];
+  brand: string;
+  costPrice: string;
+  sellingPrice: string;
+  originalPrice?: string;
+  discountPercentage?: number;
+  weight?: string;
+  dimensions?: {
+    length: number;
+    width: number;
+    height: number;
+    unit: string;
+  };
+  images: string[];
+  stockQuantity: number;
+  lowStockThreshold: number;
+  isActive: boolean;
+  supplierId?: string;
+  tags: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  categories?: Array<{
+    id: string;
+    name: string;
+    slug: string;
+  }>;
+  supplier?: {
+    id: string;
+    name: string;
+    contactEmail?: string;
+  };
+  variants?: ProductVariant[];
+  averageRating?: number;
+  reviewCount?: number;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  address?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sku: string;
+  attributes: Array<{
+    type: string;
+    value: string;
+  }>;
+  stockQuantity: number;
+  additionalPrice: string;
+  images: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ProductRating {
+  id: string;
+  productId: string;
+  customerId: string;
+  rating: number;
+  createdAt: Date;
+}
+
+export interface ProductReview {
+  id: string;
+  productId: string;
+  customerId: string;
+  rating: number;
+  reviewText: string;
+  createdAt: Date;
+  updatedAt: Date;
+  customer?: {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+  };
+}

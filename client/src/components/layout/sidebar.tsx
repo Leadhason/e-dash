@@ -12,6 +12,7 @@ import {
   Users,
   Shield,
   Handshake,
+  Truck,
   Headphones,
   Settings,
   X,
@@ -48,6 +49,7 @@ const navigation = [
     title: "Management",
     items: [
       { name: "Vendors", href: "/vendors", icon: Handshake },
+      { name: "Suppliers", href: "/suppliers", icon: Truck },
       { name: "Support", href: "/support", icon: Headphones },
       { name: "Settings", href: "/settings", icon: Settings },
     ],

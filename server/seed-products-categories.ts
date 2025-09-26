@@ -175,14 +175,26 @@ async function seedProductsAndCategories() {
         name: template.name,
         description: faker.commerce.productDescription(),
         detailedSpecifications: `Professional grade ${template.name.toLowerCase()} from ${template.brand}. Features durable construction, ergonomic design, and reliable performance for demanding applications.`,
-        categoryId: category.id,
+        categoryIds: [category.id], // FIXED: Changed from categoryId to categoryIds array
         brand: template.brand,
         images: [
-          faker.image.urlLoremFlickr({ category: 'tools', width: 400, height: 400 }),
-          faker.image.urlLoremFlickr({ category: 'tools', width: 400, height: 400 })
-        ],
+          `https://picsum.photos/400/400?random=${faker.number.int({ min: 1, max: 1000 })}`,
+          `https://picsum.photos/400/400?random=${faker.number.int({ min: 1001, max: 2000 })}`,
+          `https://picsum.photos/400/400?random=${faker.number.int({ min: 2001, max: 3000 })}`,
+          `https://picsum.photos/400/400?random=${faker.number.int({ min: 3001, max: 4000 })}`
+        ], // FIXED: Now provides exactly 4 images as per schema using reliable Picsum service
         sellingPrice: (template.basePrice * faker.number.float({ min: 0.9, max: 1.3 })).toFixed(2),
         costPrice: (template.basePrice * faker.number.float({ min: 0.6, max: 0.8 })).toFixed(2),
+        stockQuantity: faker.number.int({ min: 0, max: 100 }), // ADDED: Stock quantity
+        lowStockThreshold: faker.number.int({ min: 5, max: 20 }), // ADDED: Low stock threshold
+        weight: faker.number.float({ min: 0.1, max: 10, fractionDigits: 2 }), // ADDED: Weight
+        dimensions: { // ADDED: Dimensions
+          length: faker.number.float({ min: 5, max: 50, fractionDigits: 1 }),
+          width: faker.number.float({ min: 5, max: 30, fractionDigits: 1 }),
+          height: faker.number.float({ min: 2, max: 20, fractionDigits: 1 }),
+          unit: 'cm'
+        },
+        tags: faker.helpers.arrayElements(['new', 'popular', 'best-seller', 'professional', 'diy'], { min: 0, max: 3 }), // ADDED: Tags
         isActive: faker.datatype.boolean({ probability: 0.9 })
       };
       
@@ -201,7 +213,7 @@ async function seedProductsAndCategories() {
   
   const productsByCategory = createdCategories.map(cat => ({
     category: cat.name,
-    count: allProducts.filter(p => p.categoryId === cat.id).length
+    count: allProducts.filter(p => p.categoryIds.includes(cat.id)).length // FIXED: Updated filter logic
   }));
   
   console.log('\n📁 Products per category:');
